@@ -7,7 +7,7 @@ Shiwei Lan @ UIUC, 2018
 -------------------------------
 Created October 25, 2018
 -------------------------------
-Modified October 11, 2019 @ ASU
+Modified August 15, 2021 @ ASU
 -------------------------------
 https://bitbucket.org/lanzithinking/tesd_egwas
 """
@@ -15,9 +15,9 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
-__email__ = "shiwei@illinois.edu; lanzithinking@gmail.com; slan@asu.edu"
+__email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
 import os
 import numpy as np
@@ -26,13 +26,13 @@ import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 # self defined modules
 import sys
-sys.path.append( "../" )
-from util.GP import *
-from util.linalg import *
+sys.path.append( "../../" )
+from util.stgp.GP import *
+from util.stgp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings
-warnings.simplefilter('ignore')
+warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class STGP(GP):
@@ -45,6 +45,7 @@ class STGP(GP):
         store_eig: indicator to store eigen-pairs, default to be false
         opt: kernel option (0: separable; 1: Kronecker product; 2: Kronecker sum), default to be 2
         jit: jittering term, default to be 1e-6
+        spdapx: use speed-up or approximation
         -----------------------------------------------------------------------
         C_xt(z,z')= sum_{l=1}^infty lambda_l(t)*lambda_l(t')*phi_l(x)*phi_l(x')
         model 0: C_z=C_x Ox C_t (+ beta * I_x Ox I_t)
@@ -58,7 +59,7 @@ class STGP(GP):
         if type(temp) is GP:
             self.C_t=temp # temporal kernel
         else:
-            self.C_t=GP(temp,store_eig=store_eig,**kwargs)
+            self.C_t=GP(temp,store_eig=store_eig or Lambda is None,**kwargs)
         self.Lambda=Lambda if Lambda is not None else self.C_t.eigf # dynamic eigenvalues
         self.parameters=kwargs # all parameters of the kernel
         self.kappa=self.parameters.get('kappa',2) # decaying rate for dynamic eigenvalues, default to be 2
@@ -81,6 +82,7 @@ class STGP(GP):
         except:
             print('Parallel environment not found. It may run slowly in serial.')
             self.comm=None
+        self.spdapx=self.parameters.get('spdapx',self.N>1e3)
         self.store_eig=store_eig
         if self.store_eig:
             # obtain partial eigen-basis
@@ -102,7 +104,10 @@ class STGP(GP):
             C_xt=np.kron(self.C_t.tomat(),self.C_x.tomat()) # (IJ,IJ)
             if 'z' in out: C_z=C_xt+beta*sps.eye(self.N) # (IJ,IJ)
         else:
-            Lambda_=pow(self.Lambda**self.opt+(alpha<0)*self.jit,alpha); _,Phi_x=self.C_x.eigs(self.L)
+            Lambda_=self.Lambda**self.opt;
+            if alpha<0: Lambda_[Lambda_<self.jit**2]+=self.jit**2
+            Lambda_=pow(Lambda_,alpha);
+            _,Phi_x=self.C_x.eigs(self.L)
             if self.ker_opt=='kron_prod':
                 PhiLambda=np.reshape(Phi_x[:,None,:]*Lambda_[None,:,:],(self.N,-1),order='F') # (IJ,L)
                 C_xt=PhiLambda.dot(PhiLambda.T) # (IJ,IJ)
@@ -118,8 +123,8 @@ class STGP(GP):
                     Lambda2Phi+=np.tile(self.C_x.tomat()-C_x0,(self.J,1,1))
                 C_xt=sps.block_diag(Lambda2Phi,format='csr') # (IJ,IJ)
                 if 'z' in out: C_z=sps.kron(self.C_t.tomat(),sps.eye(self.I))+beta*C_xt # (IJ,IJ)
-        if self.N>1e3:
-            warnings.warn('Possible memory overflow!')
+        # if self.spdapx:
+        #     warnings.warn('Possible memory overflow!')
         
         output=[]
         if 'xt' in out: output.append(C_xt)
@@ -136,7 +141,7 @@ class STGP(GP):
         alpha=kwargs.pop('alpha',1) # power of dynamic eigenvalues
         beta=kwargs.pop('beta',int(self.opt==2)) # coefficient before likelihood component
         out=kwargs.pop('out',{'sep':'z','kron_prod':'z','kron_sum':'xt'}[self.ker_opt]) # output option
-        if self.N<=1e3:
+        if not self.spdapx:
             if v.shape[0]!=self.N:
                 v=v.reshape((self.N,-1),order='F')
             C_=self.tomat(alpha=alpha,beta=beta,out=out)
@@ -154,7 +159,10 @@ class STGP(GP):
                 C_xtv=self.C_t.mult(self.C_x.mult(v),transp=True) # (I,J,K_)
                 if 'z' in out: C_zv=C_xtv+beta*v # (I,J,K_)
             else:
-                Lambda_=pow(self.Lambda**self.opt+(alpha<0)*self.jit,alpha); _,Phi_x=self.C_x.eigs(self.L)
+                Lambda_=self.Lambda**self.opt;
+                if alpha<0: Lambda_[Lambda_<self.jit**2]+=self.jit**2
+                Lambda_=pow(Lambda_,alpha);
+                _,Phi_x=self.C_x.eigs(self.L)
 #                 Phiv=np.tensordot(Phi_x.T, v, 1) # (L,J,K_)
                 prun=kwargs.pop('prun',True) and self.comm and self.I>1e3 # control of parallel run
                 if prun:
@@ -184,26 +192,26 @@ class STGP(GP):
                     Lambda2Phiv=Lambda_.T[:,:,None]*Phiv # (L,J,K_)
                     C_xtv_loc=np.tensordot(Phi_loc,Lambda2Phiv,1)+((alpha>=0)*self.jit)*v_loc # (I,J,K_)
                     if 'z' in out: C_zv_loc=self.C_t.mult(v_loc,transp=True,prun=not prun,**kwargs)+beta*C_xtv_loc # (I,J,K_)
-            if 'xt' in out:
-                if prun:
-                    C_xtv=np.empty((self.I,self.J*K_))
-                    if K_>1: C_xtv_loc=C_xtv_loc.reshape((-1,C_xtv.shape[1]))
-                    self.comm.Allgatherv([C_xtv_loc,MPI.DOUBLE],[C_xtv,MPI.DOUBLE])
-                    C_xtv[pidx,:]=C_xtv.copy()
-                    if K_>1: C_xtv=C_xtv.reshape((self.I,self.J,-1))
-                else:
-                    C_xtv=C_xtv_loc
-                C_xtv=C_xtv.reshape((self.N,-1),order='F') # (IJ,K_)
-            if 'z' in out:
-                if prun:
-                    C_zv=np.empty((self.I,self.J*K_))
-                    if K_>1: C_zv_loc=C_zv_loc.reshape((-1,C_zv.shape[1]))
-                    self.comm.Allgatherv([C_zv_loc,MPI.DOUBLE],[C_zv,MPI.DOUBLE])
-                    C_zv[pidx,:]=C_zv.copy()
-                    if K_>1: C_zv=C_zv.reshape((self.I,self.J,-1))
-                else:
-                    C_zv=C_zv_loc
-                C_zv=C_zv.reshape((self.N,-1),order='F') # (IJ,K_)
+                if 'xt' in out:
+                    if prun:
+                        C_xtv=np.empty((self.I,self.J*K_))
+                        if K_>1: C_xtv_loc=C_xtv_loc.reshape((-1,C_xtv.shape[1]))
+                        self.comm.Allgatherv([C_xtv_loc,MPI.DOUBLE],[C_xtv,MPI.DOUBLE])
+                        C_xtv[pidx,:]=C_xtv.copy()
+                        if K_>1: C_xtv=C_xtv.reshape((self.I,self.J,-1))
+                    else:
+                        C_xtv=C_xtv_loc
+                if 'z' in out:
+                    if prun:
+                        C_zv=np.empty((self.I,self.J*K_))
+                        if K_>1: C_zv_loc=C_zv_loc.reshape((-1,C_zv.shape[1]))
+                        self.comm.Allgatherv([C_zv_loc,MPI.DOUBLE],[C_zv,MPI.DOUBLE])
+                        C_zv[pidx,:]=C_zv.copy()
+                        if K_>1: C_zv=C_zv.reshape((self.I,self.J,-1))
+                    else:
+                        C_zv=C_zv_loc
+            if 'xt' in out: C_xtv=C_xtv.reshape((self.N,-1),order='F') # (IJ,K_)
+            if 'z' in out: C_zv=C_zv.reshape((self.N,-1),order='F') # (IJ,K_)
         
         output=[]
         if 'xt' in out: output.append(C_xtv)
@@ -225,7 +233,7 @@ class STGP(GP):
         elif (self.ker_opt=='sep' and beta!=0) or self.ker_opt=='kron_prod':
             if v.shape[0]!=self.N:
                 v=v.reshape((self.N,-1),order='F')
-            if self.N<=1e3:
+            if not self.spdapx:
                 trtdeg=kwargs.get('trtdeg',False) # treatment of degeneracy
                 invCv=spla.solve(self.tomat(alpha=alpha,beta=beta,out=out,trtdeg=trtdeg),v,assume_a='pos')
             else:
@@ -299,18 +307,25 @@ class STGP(GP):
         if self.ker_opt in ('sep','kron_prod'): # for C_0z
             if X.shape[0]!=self.N:
                 X=X.reshape((self.N,-1),order='F')
-            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)
-            half_ldet=-X.shape[1]*np.log(rteigv).sum()
-            half_quad=eigf.T.dot(X)/rteigv[:,None]
-            warnings.warn("Obsolete!")
+            # if not self.spdapx:
+            #     half_ldet=-X.shape[1]*self.logdet()/2
+            #     quad=X*self.solve(X)
+            # else:
+                # eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)); rteigv[rteigv<self.jit**2]+=self.jit**2
+                # half_ldet=-X.shape[1]*np.log(rteigv).sum()
+                # half_quad=eigf.T.dot(X)/rteigv[:,None]
+                # quad=half_quad**2
+            logpdf,half_ldet=super().matn0pdf(X,nu=nu,chol=False)
         elif self.ker_opt=='kron_sum': # for C_xt
             if X.shape[0]!=self.I:
                 X=X.reshape((self.I,self.J,-1),order='F')
-            half_ldet=-X.shape[2]*np.log(abs(self.Lambda)).sum()
+            Lambda_=abs(self.Lambda); Lambda_[Lambda_<self.jit**2]+=self.jit**2
+            half_ldet=-X.shape[2]*np.log(Lambda_).sum()
             _,Phi_x=self.C_x.eigs(self.L)
-            half_quad=np.tensordot(Phi_x.T, X, 1)/self.Lambda.T[:,:,None] # (L,J,K_)
-        quad=-0.5*np.sum(half_quad**2)/nu
-        logpdf=half_ldet+quad
+            half_quad=np.tensordot(Phi_x.T, X, 1)/Lambda_.T[:,:,None] # (L,J,K_)
+            quad=half_quad**2
+            quad=-0.5*np.sum(quad)/nu
+            logpdf=half_ldet+quad
         return logpdf,half_ldet
     
     def update(self,C_x=None,C_t=None,Lambda=None):
@@ -378,14 +393,14 @@ if __name__=='__main__':
     t0=time.time()
     
     # define spatial and temporal kernels
-    x=np.random.randn(1004,2)
+    x=np.random.randn(104,2)
     t=np.random.rand(100)
     L=100
     C_x=GP(x,L=L,store_eig=True,ker_opt='matern')
     C_t=GP(t,L=L,store_eig=True,ker_opt='powexp')
 #     Lambda=C_t.rnd(n=10)
     Lambda=matnrnd(U=C_t.tomat(),V=np.eye(L))
-    ker_opt=2
+    ker_opt=0
     stgp=STGP(C_x,C_t,Lambda,store_eig=True,opt=ker_opt)
     verbose=stgp.comm.rank==0 if stgp.comm is not None else True
     if verbose:
@@ -421,9 +436,22 @@ if __name__=='__main__':
 #         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invCv-invCv_te)/spla.norm(invCv)))
     # error decreases with L increasing for model 2 (expected)
     
-    X=stgp.sample_priM(n=10)
+    n=10
+    X=stgp.sample_priM(n)
     logpdf,_=stgp.matn0pdf(X)
     if verbose:
         print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
+    t3=time.time()
     if verbose:
-        print('time: %.5f'% (time.time()-t2))
+        print('time: %.5f'% (t3-t2))
+    
+    u=stgp.sample_priM()[:,:,None]
+    v=stgp.sample_priM()[:,:,None]
+    h=1e-8
+    dlogpdfv_fd=(stgp.matn0pdf(u+h*v)[0]-stgp.matn0pdf(u)[0])/h
+    dlogpdfv=-stgp.solve(u).T.dot(v.flatten(order='F'))
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
+    if verbose:
+        print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
+    if verbose:
+        print('time: %.5f'% (time.time()-t3))

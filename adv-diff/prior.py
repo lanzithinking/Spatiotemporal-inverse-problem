@@ -6,6 +6,8 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 Shiwei Lan @ ASU, Sept. 2020
 --------------------------------------------------------------------------
 Created on Sep 23, 2020
+-------------------------------
+https://github.com/lanzithinking/Spatiotemporal-inverse-problem
 '''
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The Bayesian STIP project"
@@ -21,7 +23,7 @@ import matplotlib.pyplot as plt
 
 import sys
 import os
-sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
+# sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
 from hippylib import *
 from hippylib.modeling.prior import SqrtPrecisionPDE_Prior
 

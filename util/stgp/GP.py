@@ -8,7 +8,7 @@ Shiwei Lan @ UIUC, 2018
 -------------------------------
 Created October 26, 2018
 -------------------------------
-Modified October 11, 2019 @ ASU
+Modified August 15, 2021 @ ASU
 -------------------------------
 https://bitbucket.org/lanzithinking/tesd_egwas
 """
@@ -16,9 +16,9 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
-__email__ = "shiwei@illinois.edu; lanzithinking@gmail.com; slan@asu.edu"
+__email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
 import numpy as np
 import scipy as sp
@@ -28,13 +28,13 @@ import scipy.sparse.linalg as spsla
 import scipy.spatial.distance as spsd
 # self defined modules
 import sys
-sys.path.append( "../" )
+sys.path.append( "../../" )
 # from __init__ import *
-from util.linalg import *
+from util.stgp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings
-warnings.simplefilter('ignore')
+warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
     
 class GP:
@@ -52,6 +52,7 @@ class GP:
         nu: matern class order, default to be 0.5
         jit: jittering term, default to be 1e-6
         # (dist_f,s)=('mahalanobis',vec) for anisotropic kernel
+        spdapx: use speed-up or approximation
         """
         self.x=x # inputs
         if self.x.ndim==1: self.x=self.x[:,None]
@@ -75,6 +76,7 @@ class GP:
         except:
             print('Parallel environment not found. It may run slowly in serial.')
             self.comm=None
+        self.spdapx=self.parameters.get('spdapx',self.N>1e3)
         self.store_eig=store_eig
         if self.store_eig:
             # obtain partial eigen-basis
@@ -119,7 +121,7 @@ class GP:
         C=kerf(self.x)
         if type(C) is np.matrix:
             C=C.getA()
-        if self.N>1e3:
+        if self.spdapx and not sps.issparse(C):
             warnings.warn('Possible memory overflow!')
         return C
     
@@ -128,7 +130,7 @@ class GP:
         Kernel multiply a function (vector): C*v
         """
         transp=kwargs.get('transp',False) # whether to transpose the result
-        if self.N<=1e3:
+        if not self.spdapx:
             Cv=multf(self.tomat(),v,transp)
         else:
             kerf=getattr(self,'_'+self.ker_opt) # obtain kernel function
@@ -161,7 +163,7 @@ class GP:
         Kernel solve a function (vector): C^(-1)*v
         """
         transp=kwargs.pop('transp',False)
-        if self.N<=1e3:
+        if not self.spdapx:
             invCv=mdivf(self.tomat(),v,transp)
         else:
             C_op=spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,transp=transp,prun=True))
@@ -185,7 +187,7 @@ class GP:
         if upd or L>self.L or not all([hasattr(self,attr) for attr in ('eigv','eigf')]):
             maxiter=kwargs.pop('maxiter',100)
             tol=kwargs.pop('tol',1e-10)
-            C_op=self.tomat() if self.N<=1e3 else spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,**kwargs))
+            C_op=self.tomat() if not self.spdapx else spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,**kwargs))
             try:
                 eigv,eigf=spsla.eigsh(C_op,L,maxiter=maxiter,tol=tol)
             except Exception as divg:
@@ -212,7 +214,8 @@ class GP:
             y=self.solve(x,**kwargs)
         else:
             eigv,eigf=self.eigs(**kwargs)
-            y=multf(eigf*pow((alpha<0)*self.jit+eigv,alpha),multf(eigf.T,x,transp),transp)
+            if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
+            y=multf(eigf*pow(eigv,alpha),multf(eigf.T,x,transp),transp)
         return y
     
     def logdet(self):
@@ -224,27 +227,28 @@ class GP:
         ldet=np.sum(np.log(abs_eigv[abs_eigv>=np.finfo(np.float).eps]))
         return ldet
     
-    def matn0pdf(self,X,nu=1):
+    def matn0pdf(self,X,nu=1,chol=True):
         """
         Compute logpdf of centered matrix normal distribution X ~ MN(0,C,nu*I)
         """
-        chol=(self.N<=1e3)
-        if chol:
-            try:
-                cholC,lower=spla.cho_factor(self.tomat())
-                half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC)))
-                quad=X*spla.cho_solve((cholC,lower),X)
-            except spla.LinAlgError:
-                warnings.warn('Cholesky decomposition failed.')
-                chol=False
-                pass
-        if not chol:
-#             eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)
-#             half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
-#             half_quad=eigf.T.dot(X)/rteigv
-            half_ldet=-X.shape[1]*self.logdet()/2
-            quad=X*self.solve(X)
-#         quad=-0.5*np.sum(half_quad**2)/nu
+        if not self.spdapx:
+            if chol:
+                try:
+                    cholC,lower=spla.cho_factor(self.tomat())
+                    half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC)))
+                    quad=X*spla.cho_solve((cholC,lower),X)
+                except spla.LinAlgError:
+                    warnings.warn('Cholesky decomposition failed.')
+                    chol=False
+                    pass
+            if not chol:
+                half_ldet=-X.shape[1]*self.logdet()/2
+                quad=X*self.solve(X)
+        else:
+            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)); rteigv[rteigv<self.jit**2]+=self.jit**2
+            half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
+            half_quad=eigf.T.dot(X)/rteigv[:,None]
+            quad=half_quad**2
         quad=-0.5*np.sum(quad)/nu
         logpdf=half_ldet+quad
         return logpdf,half_ldet
@@ -316,5 +320,17 @@ if __name__=='__main__':
 #     logpdf,_=gp.matn0pdf(X)
 #     if verbose:
 #         print('Log-pdf of a matrix normal random variable: {:.4f}'.format(logpdf))
+    t3=time.time()
     if verbose:
-        print('time: %.5f'% (time.time()-t2))
+        print('time: %.5f'% (t3-t2))
+    
+    u=gp.rnd()
+    v=gp.rnd()
+    h=1e-5
+    dlogpdfv_fd=(gp.matn0pdf(u+h*v)[0]-gp.matn0pdf(u)[0])/h
+    dlogpdfv=-gp.solve(u).T.dot(v)
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
+    if verbose:
+        print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
+    if verbose:
+        print('time: %.5f'% (time.time()-t3))

@@ -7,7 +7,7 @@ Shiwei Lan @ UIUC, 2018
 -------------------------------
 Created October 25, 2018
 -------------------------------
-Modified October 11, 2019 @ ASU
+Modified August 15 @ ASU
 -------------------------------
 https://bitbucket.org/lanzithinking/tesd_egwas
 """
@@ -15,9 +15,9 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
-__email__ = "shiwei@illinois.edu; lanzithinking@gmail.com; slan@asu.edu"
+__email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
 import os
 import numpy as np
@@ -26,14 +26,14 @@ import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 # self defined modules
 import sys
-sys.path.append( "../" )
-from util.STGP import *
-from util.STGP_isub import *
-from util.linalg import *
+sys.path.append( "../../" )
+from util.stgp.STGP import *
+from util.stgp.STGP_isub import *
+from util.stgp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings
-warnings.simplefilter('ignore')
+warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class STGP_mg(STGP_isub,STGP,GP):
@@ -79,7 +79,7 @@ class STGP_mg(STGP_isub,STGP,GP):
         """
         kwargs.update(beta=self.nz_var**(self.opt!=2)/self.K,out='z')
         mgC=STGP.tomat(self,**kwargs) # STGP
-        if self.N>1e3:
+        if self.spdapx and not sps.issparse(mgC):
             warnings.warn('Possible memory overflow!')
         return mgC
     
@@ -95,7 +95,7 @@ class STGP_mg(STGP_isub,STGP,GP):
         """
         Marginal kernel solve a function (vector): C_^(-1) *v, C_ as in 'tomat'
         """
-        if self.N<=1e3:
+        if not self.spdapx:
             if v.shape[0]!=self.N:
                 v=v.reshape((self.N,-1),order='F')
             mgC=self.tomat()
@@ -213,7 +213,7 @@ class STGP_mg(STGP_isub,STGP,GP):
             M=STGP.act(self,self.act(mvn0Irv*np.sqrt(self.nz_var/self.K),alpha=-0.5),alpha=0.5) # (IJ,1) # STGP
         elif self.ker_opt=='kron_sum':
             MU=self.C_t.mult(self.solve(y).reshape((self.I,self.J,-1),order='F'),transp=True) # (I,J)
-            chol=(self.N<=1e3)
+            chol=not self.spdapx
             if chol:
 #                 C_tI_x=sps.kron(self.C_t.tomat(),sps.eye(self.I)) # (IJ,IJ)
 #                 Sigma=C_tI_x.dot(self.solve(STGP.tomat(self,out='xt')/self.K)) # (IJ,IJ)
@@ -223,8 +223,8 @@ class STGP_mg(STGP_isub,STGP,GP):
 #                     M=np.tensordot(cholSigma,mvn0Irv.reshape((self.N,-1),order='F'),1) # (IJ,1)
                     cholSigma,pivot=sparse_cholesky(Sigma,diag_pivot_thresh=self.jit)
                     M=pivot.dot(cholSigma).dot(mvn0Irv.reshape((self.N,-1),order='F')) # (IJ,1)
-                except spla.LinAlgError:
-                    warnings.warn('Cholesky decomposition failed.')
+                except Exception as e: #spla.LinAlgError:
+                    warnings.warn('Cholesky decomposition failed: '+str(e))
                     chol=False
                     pass
             if not chol:
@@ -252,7 +252,7 @@ if __name__=='__main__':
     t0=time.time()
     
     # define spatial and temporal kernels
-    x=np.random.randn(1004,2)
+    x=np.random.randn(104,2)
     t=np.random.rand(100)
     L=100
     C_x=GP(x,L=L,store_eig=True,ker_opt='matern')
@@ -282,27 +282,38 @@ if __name__=='__main__':
     if verbose:
         print('time: %.5f'% (t2-t1))
     
-    n=4
-    v=mg.sample_priM(n).reshape((-1,n),order='F')
-#     invmgCv=spsla.spsolve(mgC,v)
-#     mgC_op=spsla.LinearOperator((mg.N,)*2,matvec=lambda v:mg.mult(v))
-#     invmgCv=itsol(mgC_op,v,solver='cgs')
-    invmgCv_te=mg.solve(v)
-#     invmgCv_te=mg.act(v,alpha=-1)
+#     n=4
+#     v=mg.sample_priM(n).reshape((-1,n),order='F')
+# #     invmgCv=spsla.spsolve(mgC,v)
+# #     mgC_op=spsla.LinearOperator((mg.N,)*2,matvec=lambda v:mg.mult(v))
+# #     invmgCv=itsol(mgC_op,v,solver='cgs')
+#     invmgCv_te=mg.solve(v)
+# #     invmgCv_te=mg.act(v,alpha=-1)
+# #     if verbose:
+# #         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invmgCv-invmgCv_te)/spla.norm(invmgCv)))
+#     # error decreases with L increasing for model 2 (expected)
+#
+#     t3=time.time()
 #     if verbose:
-#         print('Relatively difference between direct solver and iterative solver: {:.4f}'.format(spla.norm(invmgCv-invmgCv_te)/spla.norm(invmgCv)))
-    # error decreases with L increasing for model 2 (expected)
+#         print('time: %.5f'% (t3-t2))
+#
+#     if verbose:
+#         print('Log-determinant of the marginal kernel {:4f}'.format(mg.logdet()))
+#
+#     y=v.reshape((mg.I,mg.J,-1),order='F')
+#     M_post=mg.sample_postM(y, n=2)
+#
+    t4=time.time()
+#     if verbose:
+#         print('time: %.5f'% (t4-t3))
     
-    t3=time.time()
+    u=mg.sample_priM()[:,:,None]
+    v=mg.sample_priM()[:,:,None]
+    h=1e-8
+    dlogpdfv_fd=(mg.matn0pdf(u+h*v)[0]-mg.matn0pdf(u)[0])/h
+    dlogpdfv=-mg.solve(u).T.dot(v.flatten(order='F'))
+    rdiff_gradv=np.abs(dlogpdfv_fd-dlogpdfv)/np.linalg.norm(v)
     if verbose:
-        print('time: %.5f'% (t3-t2))
-    
+        print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gradv)
     if verbose:
-        print('Log-determinant of the marginal kernel {:4f}'.format(mg.logdet()))
-    
-    y=v.reshape((mg.I,mg.J,-1),order='F')
-    M_post=mg.sample_postM(y, n=2)
-    
-    if verbose:
-        print('time: %.5f'% (time.time()-t3))
-    
+        print('time: %.5f'% (time.time()-t4))

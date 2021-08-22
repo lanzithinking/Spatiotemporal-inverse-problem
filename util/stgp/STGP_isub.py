@@ -8,7 +8,7 @@ Shiwei Lan @ UIUC, 2018
 -------------------------------
 Created October 25, 2018
 -------------------------------
-Modified October 11, 2019 @ ASU
+Modified August 15, 2021 @ ASU
 -------------------------------
 https://bitbucket.org/lanzithinking/tesd_egwas
 """
@@ -16,9 +16,9 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.6"
+__version__ = "0.8"
 __maintainer__ = "Shiwei Lan"
-__email__ = "shiwei@illinois.edu; lanzithinking@gmail.com; slan@asu.edu"
+__email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
 import os
 import numpy as np
@@ -27,14 +27,14 @@ import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 # self defined modules
 import sys
-sys.path.append( "../" )
-# from util.GP import *
-from util.STGP import *
-from util.linalg import *
+sys.path.append( "../../" )
+# from util.stgp.GP import *
+from util.stgp.STGP import *
+from util.stgp.linalg import *
 
 # set to warn only once for the same warnings
 import warnings
-warnings.simplefilter('ignore')
+warnings.simplefilter('once')
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class STGP_isub(STGP):#,GP):
@@ -45,6 +45,7 @@ class STGP_isub(STGP):#,GP):
         L: truncation number in Mercer's series
         store_eig: indicator to store eigen-pairs, default to be false
         K: number of trials
+        spdapx: use speed-up or approximation
         ---------------------
         C_isub:=C_t^delta Ox I_L + K^(-delta) diag( vec^T(Lambda^(2delta)) )
         delta=1: the above kernel appears in the inverse of marginal kernel invC^* of model II
@@ -61,6 +62,7 @@ class STGP_isub(STGP):#,GP):
             warnings.warn("Karhunen-Loeve truncation number cannot exceed the size of spatial basis!")
             self.L=self.I; self.Lambda=self.Lambda[:,:self.I]
         self.D=self.L*self.J
+        self.spdapx=self.parameters.get('spdapx',self.D>1e3)
         self.store_eig=store_eig
         if self.store_eig:
             # obtain partial eigen-basis
@@ -79,7 +81,7 @@ class STGP_isub(STGP):#,GP):
             S+=sps.kron(self.C_t.tomat(),sps.eye(self.L)) # (LJ,LJ)
         else:
             S+=sps.kron(self.C_t.act(np.eye(self.J),alpha=delta),sps.eye(self.L)) # (LJ,LJ)
-        if self.D>1e3:
+        if self.spdapx and not sps.issparse(S):
             warnings.warn('Possible memory overflow!')
         return S
     
@@ -88,7 +90,7 @@ class STGP_isub(STGP):#,GP):
         action of the kernel in the intrinsic subspace (for model II only): C_isub *v
         """
         delta=kwargs.pop('delta',1) # power of dynamic eigenvalues and C_t
-        if self.D<=1e3:
+        if not self.spdapx:
             if v.shape[0]!=self.D:
                 v=v.reshape((self.D,-1),order='F') # (LJ,K_)
             Sv=self._tomat(delta=delta).dot(v) # (LJ,K_)
@@ -110,7 +112,7 @@ class STGP_isub(STGP):#,GP):
         if delta==-1:
             lambda2=self.Lambda.flatten()**2/self.K
             lambda2v=lambda2[:,None]*v
-        if self.D<=1e3:
+        if not self.spdapx:
             S_mat=self._tomat(delta=delta**(delta!=-1))
             if delta==-1:
 #                 invSv=(S_mat-sps.diags(lambda2)).dot(spsla.spsolve(S_mat,lambda2[:,None]*v))
@@ -143,7 +145,7 @@ class STGP_isub(STGP):#,GP):
             L=min(L,self.D)
             maxiter=kwargs.pop('maxiter',100)
             tol=kwargs.pop('tol',1e-10)
-            if self.D<=1e3:
+            if not self.spdapx:
                 S_op=self._tomat(delta=delta) if alpha>0 else self._solve(np.eye(self.D),delta=delta)
             else:
                 S_op=spsla.LinearOperator((self.D,)*2,matvec=lambda v:self._mult(v,delta=delta,**kwargs) if alpha>0 else self._solve(v,delta=delta,**kwargs))
@@ -173,20 +175,21 @@ class STGP_isub(STGP):#,GP):
         else:
             if x.shape[0]!=self.D:
                 x=x.reshape((self.D,-1),order='F')
-            chol=(abs(alpha)==0.5 and self.D<=1e3)
+            chol=(abs(alpha)==0.5 and not self.spdapx)
             if chol:
                 try:
     #                 cholS,lower=spla.cho_factor(self._tomat(**kwargs),lower=True) # not working for sparse matrix
     #                 y=np.tril(cholS).dot(x) if alpha>0 else spla.cho_solve((cholS,lower),x)
                     cholS,pivot=sparse_cholesky(self._tomat(**kwargs),diag_pivot_thresh=self.jit)
                     y=pivot.dot(cholS.dot(x)) if alpha>0 else spsla.spsolve(pivot.dot(cholS),x)
-                except Exception:#spla.LinAlgError:
-                    warnings.warn('Cholesky decomposition failed.')
+                except Exception as e:#spla.LinAlgError:
+                    warnings.warn('Cholesky decomposition failed: '+str(e))
                     chol=False
                     pass
             if not chol:
                 eigv,eigf=self._eigs(**kwargs)
-                y=(eigf*pow((alpha<0)*self.jit+eigv,alpha)).dot(eigf.T.dot(x))
+                if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
+                y=(eigf*pow(eigv,alpha)).dot(eigf.T.dot(x))
 #         if x.shape[0]!=self.D:
 #             x=x.reshape((self.D,-1),order='F')
 #         y=GP.act(self,x,alpha=alpha,**kwargs)

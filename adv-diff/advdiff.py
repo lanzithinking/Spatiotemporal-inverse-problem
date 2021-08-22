@@ -15,6 +15,8 @@ The purpose of this script is to obtain geometric quantities, misfit, its gradie
 --To plot PDE solutions:           adif.pde.plot_soln(x, t) for state x at time t
 --------------------------------------------------------------------------
 Created on Sep 23, 2020
+-------------------------------
+https://github.com/lanzithinking/Spatiotemporal-inverse-problem
 '''
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The Bayesian STIP project"
@@ -31,7 +33,7 @@ import matplotlib.pyplot as plt
 
 import sys
 import os
-sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
+# sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
 from hippylib import *
 
 sys.path.append( "../" )

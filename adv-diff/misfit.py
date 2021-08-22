@@ -6,11 +6,15 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 Shiwei Lan @ ASU, Sept. 2020
 --------------------------------------------------------------------------
 Created on Sep 23, 2020
+-------------------------------
+Modified August 15, 2021 @ ASU
+-------------------------------
+https://github.com/lanzithinking/Spatiotemporal-inverse-problem
 '''
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -21,12 +25,13 @@ import matplotlib.pyplot as plt
 
 import sys
 import os
-sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
+# sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
 from hippylib import *
 from pde import TimeDependentAD
 
 sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
+from util.stgp.STGP import STGP
 
 class SpaceTimePointwiseStateObservation(Misfit):
     """
@@ -62,6 +67,11 @@ class SpaceTimePointwiseStateObservation(Misfit):
         # reset observation container for reference
         self.prep_container()
         self.d.axpy(1., d)
+        
+        self.STlik = kwargs.pop('STlik',True)
+        if self.STlik:
+            # define STGP kernel for the likelihood (misfit)
+            self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-1)
         
     def prep_container(self, Vh=None):
         """
@@ -126,15 +136,27 @@ class SpaceTimePointwiseStateObservation(Misfit):
         """
         Compute misfit
         """
-        c = 0
-        for t in self.observation_times:
-            x[STATE].retrieve(self.u_snapshot, t)
-            self.B.mult(self.u_snapshot, self.Bu_snapshot)
-            self.d.retrieve(self.d_snapshot, t)
-            self.Bu_snapshot.axpy(-1., self.d_snapshot)
-            c += self.Bu_snapshot.inner(self.Bu_snapshot)
+        if self.STlik:
+            du = []
+            for t in self.observation_times:
+                x[STATE].retrieve(self.u_snapshot, t)
+                self.B.mult(self.u_snapshot, self.Bu_snapshot)
+                self.d.retrieve(self.d_snapshot, t)
+                self.Bu_snapshot.axpy(-1., self.d_snapshot)
+                du.append(self.Bu_snapshot.get_local())
+            du = np.stack(du).T # (I,J)
+            res = -self.stgp.matn0pdf(du)[0]#,nu=self.noise_variance)[0]
+        else:
+            c = 0
+            for t in self.observation_times:
+                x[STATE].retrieve(self.u_snapshot, t)
+                self.B.mult(self.u_snapshot, self.Bu_snapshot)
+                self.d.retrieve(self.d_snapshot, t)
+                self.Bu_snapshot.axpy(-1., self.d_snapshot)
+                c += self.Bu_snapshot.inner(self.Bu_snapshot)
+            res = c/(2.*self.noise_variance)
             
-        return c/(2.*self.noise_variance)
+        return  res
     
     def grad(self, i, x, out):
         """
@@ -142,14 +164,30 @@ class SpaceTimePointwiseStateObservation(Misfit):
         """
         out.zero()
         if i == STATE:
-            for t in self.observation_times:
-                x[STATE].retrieve(self.u_snapshot, t)
-                self.B.mult(self.u_snapshot, self.Bu_snapshot)
-                self.d.retrieve(self.d_snapshot, t)
-                self.Bu_snapshot.axpy(-1., self.d_snapshot)
-                self.Bu_snapshot *= 1./self.noise_variance
-                self.B.transpmult(self.Bu_snapshot, self.u_snapshot) 
-                out.store(self.u_snapshot, t)           
+            if self.STlik:
+                du = []
+                for t in self.observation_times:
+                    x[STATE].retrieve(self.u_snapshot, t)
+                    self.B.mult(self.u_snapshot, self.Bu_snapshot)
+                    self.d.retrieve(self.d_snapshot, t)
+                    self.Bu_snapshot.axpy(-1., self.d_snapshot)
+                    # self.Bu_snapshot *= 1./self.noise_variance
+                    du.append(self.Bu_snapshot.get_local())
+                du = np.stack(du).T
+                g = self.stgp.solve(du).reshape(du.shape,order='F')
+                for j,t in enumerate(self.observation_times):
+                    self.Bu_snapshot.set_local(g[:,j])
+                    self.B.transpmult(self.Bu_snapshot, self.u_snapshot) 
+                    out.store(self.u_snapshot, t)
+            else:
+                for t in self.observation_times:
+                    x[STATE].retrieve(self.u_snapshot, t)
+                    self.B.mult(self.u_snapshot, self.Bu_snapshot)
+                    self.d.retrieve(self.d_snapshot, t)
+                    self.Bu_snapshot.axpy(-1., self.d_snapshot)
+                    self.Bu_snapshot *= 1./self.noise_variance
+                    self.B.transpmult(self.Bu_snapshot, self.u_snapshot) 
+                    out.store(self.u_snapshot, t)
         else:
             pass
     
@@ -159,12 +197,26 @@ class SpaceTimePointwiseStateObservation(Misfit):
     def apply_ij(self, i,j, direction, out):
         out.zero()
         if i == STATE and j == STATE:
-            for t in self.observation_times:
-                direction.retrieve(self.u_snapshot, t)
-                self.B.mult(self.u_snapshot, self.Bu_snapshot)
-                self.Bu_snapshot *= 1./self.noise_variance
-                self.B.transpmult(self.Bu_snapshot, self.u_snapshot) 
-                out.store(self.u_snapshot, t)
+            if self.STlik:
+                du = []
+                for t in self.observation_times:
+                    direction.retrieve(self.u_snapshot, t)
+                    self.B.mult(self.u_snapshot, self.Bu_snapshot)
+                    # self.Bu_snapshot *= 1./self.noise_variance
+                    du.append(self.Bu_snapshot.get_local())
+                du = np.stack(du).T
+                g = self.misfit.stgp.solve(du).reshape(du.shape,order='F')
+                for j,t in enumerate(self.observation_times):
+                    self.Bu_snapshot.set_local(g[:,j])
+                    self.B.transpmult(self.Bu_snapshot, self.u_snapshot) 
+                    out.store(self.u_snapshot, t)
+            else:
+                for t in self.observation_times:
+                    direction.retrieve(self.u_snapshot, t)
+                    self.B.mult(self.u_snapshot, self.Bu_snapshot)
+                    self.Bu_snapshot *= 1./self.noise_variance
+                    self.B.transpmult(self.Bu_snapshot, self.u_snapshot) 
+                    out.store(self.u_snapshot, t)
         else:
             pass    
     
@@ -202,6 +254,7 @@ class SpaceTimePointwiseStateObservation(Misfit):
     
 if __name__ == '__main__':
     np.random.seed(2020)
+    from prior import *
 #     # define pde
     meshsz = (61,61)
     eldeg = 1
@@ -230,8 +283,26 @@ if __name__ == '__main__':
 #     misfit.d.zero()
 #     misfit.d.axpy(1.,rf_obs)
     # plot observations
-    plt_times=[1.,2.,3.,4.]
-    fig = misfit.plot_data(plt_times, (10,9))
-    plt.subplots_adjust(wspace=0.1, hspace=0.2)
-    plt.savefig(os.path.join(os.getcwd(),'properties/obs.png'),bbox_inches='tight')
+    # plt_times=[1.,2.,3.,4.]
+    # fig = misfit.plot_data(plt_times, (10,9))
+    # plt.subplots_adjust(wspace=0.1, hspace=0.2)
+    # plt.savefig(os.path.join(os.getcwd(),'properties/obs.png'),bbox_inches='tight')
     
+    # test gradient
+    prior = BiLaplacian(Vh=pde.Vh[PARAMETER], gamma=1., delta=8.)
+    u = prior.sample()
+    x = [pde.generate_vector(STATE), u, None]
+    pde.solveFwd(x[STATE], x)
+    c = misfit.cost(x)
+    g = pde.generate_vector(STATE)
+    misfit.grad(STATE, x, g)
+    v = prior.sample()
+    dx = [pde.generate_vector(STATE), v, None]
+    pde.solveFwd(dx[STATE], dx)
+    h = 1e-8
+    x[STATE].axpy(h,dx[STATE])
+    c1 = misfit.cost(x)
+    gdx_fd = (c1-c)/h
+    gdx = g.inner(dx[STATE])
+    rdiff_gdx = abs(gdx_fd-gdx)/dx[STATE].norm("linf", 'l2')
+    print('Relative difference of gradients in a random direction between exact calculation and finite difference: %.10f' % rdiff_gdx)

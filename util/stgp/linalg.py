@@ -28,11 +28,11 @@ import scipy.sparse.linalg as spsla
 # except ImportError:
 #     print('mpi4py not installed! It may run slowly...')
 #     pass
-from __init__ import *
 
-# # self defined modules
-# import sys
-# sys.path.append( "../" )
+# self defined modules
+import sys
+sys.path.append( "../../" )
+from util.stgp.__init__ import *
 
 # set to warn only once for the same warnings
 import warnings
