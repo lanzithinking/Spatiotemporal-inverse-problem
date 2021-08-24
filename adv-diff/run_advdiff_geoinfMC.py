@@ -22,10 +22,10 @@ np.random.seed(seed)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=1)
+    parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.005,.005,None,None])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.005,.02,.02,None,None])
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
@@ -37,7 +37,7 @@ def main():
     gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=True)
     adif.prior.V=adif.prior.Vh
     
     # initialization

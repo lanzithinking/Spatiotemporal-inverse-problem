@@ -31,6 +31,7 @@ from pde import TimeDependentAD
 
 sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
+from util.stgp.GP import GP
 from util.stgp.STGP import STGP
 
 class SpaceTimePointwiseStateObservation(Misfit):
@@ -71,7 +72,10 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.STlik = kwargs.pop('STlik',True)
         if self.STlik:
             # define STGP kernel for the likelihood (misfit)
-            self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-1)
+            # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), sigma2=2, jit=1e-2)
+            Cx=GP(self.targets, l=.5)
+            Ct=GP(self.observation_times, store_eig=True, l=.1)
+            self.stgp=STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',2))
         
     def prep_container(self, Vh=None):
         """

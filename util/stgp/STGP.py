@@ -319,6 +319,7 @@ class STGP(GP):
         elif self.ker_opt=='kron_sum': # for C_xt
             if X.shape[0]!=self.I:
                 X=X.reshape((self.I,self.J,-1),order='F')
+            if np.ndim(X)<3: X=X[:,:,None]
             Lambda_=abs(self.Lambda); Lambda_[Lambda_<self.jit**2]+=self.jit**2
             half_ldet=-X.shape[2]*np.log(Lambda_).sum()
             _,Phi_x=self.C_x.eigs(self.L)
