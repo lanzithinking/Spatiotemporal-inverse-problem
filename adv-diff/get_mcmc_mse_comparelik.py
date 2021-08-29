@@ -1,8 +1,8 @@
 """
-Plot estimates of uncertainty field u in Advection-Diffusion inverse problem.
+Get mean squared errors of uncertainty field u in Advection-Diffusion inverse problem.
 Shiwei Lan @ U of Warwick, 2016
 -------------------------------
-Modified for DREAM December 2020 @ ASU
+Modified for STIP August 2021 @ ASU
 """
 
 import os,pickle
@@ -49,10 +49,13 @@ nref = 1
 adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 # adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
-# set up latent
-meshsz_latent = (21,21)
-adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
-adif_latent.prior.V=adif_latent.prior.Vh
+# # set up latent
+# meshsz_latent = (21,21)
+# adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
+# adif_latent.prior.V=adif_latent.prior.Vh
+# get the true parameter (initial condition)
+ic_expr = df.Expression('min(0.5,exp(-100*(pow(x[0]-0.35,2) +  pow(x[1]-0.7,2))))', element=adif.prior.V.ufl_element())
+true_param = df.interpolate(ic_expr, adif.prior.V).vector()
 
 # ##------ define networks ------##
 # # training data algorithms
@@ -131,54 +134,53 @@ adif_latent.prior.V=adif_latent.prior.Vh
 algs=('pCN','infMALA','infHMC')#,'epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC','DRinfmHMC')
 alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC','DR-$\infty$-HMC')
 num_algs=len(algs)
+# store results
+lik_mdls=('simple','STlik')
+num_mdls=len(lik_mdls)
+mse_m=np.zeros((num_mdls,num_algs))
+mse_s=np.zeros((num_mdls,num_algs))
 # obtain estimates
 folder = './analysis_eldeg'+str(eldeg)
-mean_v=MultiVector(adif.prior.gen_vector(),num_algs)
-std_v=MultiVector(adif.prior.gen_vector(),num_algs)
-if os.path.exists(os.path.join(folder,'mcmc_mean.h5')) and os.path.exists(os.path.join(folder,'mcmc_std.h5')):
-    samp_f=df.Function(adif.prior.V,name="mv")
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_mean.h5'),"r") as f:
-        for i in range(num_algs):
-            f.read(samp_f,algs[i])
-            mean_v[i].set_local(samp_f.vector())
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_std.h5'),"r") as f:
-        for i in range(num_algs):
-            f.read(samp_f,algs[i])
-            std_v[i].set_local(samp_f.vector())
-else:
+for m in range(num_mdls):
+    print('Processing '+lik_mdls[m]+' likelihood model...\n')
+    fld_m = folder+'/'+lik_mdls[m]
     # preparation for estimates
-    hdf5_files=[f for f in os.listdir(folder) if f.endswith('.h5')]
-    pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
+    hdf5_files=[f for f in os.listdir(fld_m) if f.endswith('.h5')]
+    pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
     num_samp=5000
     prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
     for i in range(num_algs):
         print('Getting estimates for '+algs[i]+' algorithm...')
         # obtain weights
-        wts=np.ones(num_samp)/num_samp
-        if 'DREAM' in algs[i]:
-            for f_i in pckl_files:
-                if '_'+algs[i]+'_' in f_i:
+        wts=[]
+        for f_i in pckl_files:
+            if '_'+algs[i]+'_' in f_i:
+                if 'DREAM' in algs[i]:
                     try:
-                        f=open(os.path.join(folder,f_i),'rb')
+                        f=open(os.path.join(fld_m,f_i),'rb')
                         f_read=pickle.load(f)
                         logwts=f_read[4]; logwts-=logwts.max()
-                        wts=np.exp(logwts); wts/=np.sum(wts)
+                        wts.append(np.exp(logwts)); wts[-1]/=np.sum(wts[-1])
                         f.close()
                         print(f_i+' has been read!')
                     except:
                         pass
+                else:
+                    wts.append(np.ones(num_samp)/num_samp)
         bip=adif_latent if 'DREAM' in algs[i] else adif
         # calculate posterior estimates
         found=False
         samp_f=df.Function(bip.prior.V,name="parameter")
-        samp_mean=adif.prior.gen_vector(); samp_mean.zero()
-        samp_std=adif.prior.gen_vector(); samp_std.zero()
-#         num_read=0
+        # samp_mean=adif.prior.gen_vector(); samp_mean.zero()
+        # samp_std=adif.prior.gen_vector(); samp_std.zero()
+        errs=[]
+        num_read=0
         for f_i in hdf5_files:
             if '_'+algs[i]+'_' in f_i:
                 try:
-                    f=df.HDF5File(bip.pde.mpi_comm,os.path.join(folder,f_i),"r")
-                    samp_mean.zero(); samp_std.zero(); num_read=0
+                    f=df.HDF5File(bip.pde.mpi_comm,os.path.join(fld_m,f_i),"r")
+                    # samp_mean.zero(); #samp_std.zero(); #num_read=0
+                    err_=0
                     for s in range(num_samp):
                         if s+1 in prog:
                             print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
@@ -198,83 +200,29 @@ else:
 #                         else:
 #                             u=u_
                         if '_whitened_emulated' in f_i: u=adif.prior.v2u(u)
-                        samp_mean.axpy(wts[s],u)
-                        samp_std.axpy(wts[s],u*u)
-#                         num_read+=1
+                        # samp_mean.axpy(wts[num_read][s],u)
+                        # samp_std.axpy(wts[num_read][s],u*u)
+                        err_+=wts[num_read][s]*(u-true_param).norm('l2')**2
+                    # compute error
+                    # errs.append((samp_mean-true_param).norm('l2')/true_param.norm('l2'))
+                    errs.append(np.sqrt(err_)/true_param.norm('l2'))
+                    num_read+=1
                     f.close()
                     print(f_i+' has been read!')
                     f_read=f_i
-                    found=True
                 except:
                     pass
-        if found:
+        print('%d experiment(s) have been processed for %s algorithm with %s likelihood model.' % (num_read, algs[i], lik_mdls[m]))
+        if num_read>0:
 #             samp_mean=samp_mean/num_read; samp_std=samp_std/num_read
-            mean_v[i].set_local(samp_mean)
-            std_v[i].set_local(np.sqrt((samp_std - samp_mean*samp_mean).get_local()))
-    # save
-    samp_f=df.Function(adif.prior.V,name="mv")
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_mean.h5'),"w") as f:
-        for i in range(num_algs):
-            samp_f.vector().set_local(mean_v[i])
-            f.write(samp_f,algs[i])
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_std.h5'),"w") as f:
-        for i in range(num_algs):
-            samp_f.vector().set_local(std_v[i])
-            f.write(samp_f,algs[i])
-
-# plot
-# num_algs-=1
-plt.rcParams['image.cmap'] = 'jet'
-num_rows=1
-# posterior mean
-fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,4))
-sub_figs = [None]*len(axes.flat)
-for i,ax in enumerate(axes.flat):
-    plt.axes(ax)
-#     if i==0:
-#         # plot MAP
-#         try:
-#             f=df.XDMFFile(adif.mpi_comm, os.path.join(os.getcwd(),'results/MAP.xdmf'))
-#             MAP=df.Function(adif.prior.V,name="MAP")
-#             f.read_checkpoint(MAP,'m',0)
-#             f.close()
-#             sub_figs[i]=df.plot(MAP)
-#             fig.colorbar(sub_figs[i],ax=ax)
-#             ax.set_title('MAP')
-#         except:
-#             pass
-#     elif 1<=i<=num_algs:
-    sub_figs[i]=df.plot(vec2fun(mean_v[i],adif.prior.V))
-    ax.set_title(alg_names[i])
-    ax.set_aspect('auto')
-    plt.axis([0, 1, 0, 1])
-# set color bar
-# cax,kw = mp.colorbar.make_axes([ax for ax in axes.flat])
-# plt.colorbar(sub_fig, cax=cax, **kw)
-from util.common_colorbar import common_colorbar
-fig=common_colorbar(fig,axes,sub_figs)
-plt.subplots_adjust(wspace=0.1, hspace=0.2)
-# save plot
-# fig.tight_layout()
-plt.savefig(folder+'/mcmc_estimates_mean.png',bbox_inches='tight')
-# plt.show()
-
-# posterior std
-fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,4))
-sub_figs = [None]*len(axes.flat)
-for i,ax in enumerate(axes.flat):
-    plt.axes(ax)
-    sub_figs[i]=df.plot(vec2fun(std_v[i],adif.prior.V))
-    ax.set_title(alg_names[i])
-    ax.set_aspect('auto')
-    plt.axis([0, 1, 0, 1])
-# set color bar
-# cax,kw = mp.colorbar.make_axes([ax for ax in axes.flat])
-# plt.colorbar(sub_fig, cax=cax, **kw)
-from util.common_colorbar import common_colorbar
-fig=common_colorbar(fig,axes,sub_figs)
-plt.subplots_adjust(wspace=0.1, hspace=0.2)
-# save plot
-# fig.tight_layout()
-plt.savefig(folder+'/mcmc_estimates_std.png',bbox_inches='tight')
-# plt.show()
+            # mean_v[i].set_local(samp_mean)
+            # std_v[i].set_local(np.sqrt((samp_std - samp_mean*samp_mean).get_local()))
+            errs = np.stack(errs)
+            mse_m[m,i] = np.median(errs)
+            mse_s[m,i] = errs.std()
+# save
+import pandas as pd
+mse_m = pd.DataFrame(data=mse_m,index=lik_mdls,columns=alg_names[:num_algs])
+mse_s = pd.DataFrame(data=mse_s,index=lik_mdls,columns=alg_names[:num_algs])
+mse_m.to_csv(os.path.join(folder,'MSE-mean.csv'),columns=alg_names[:num_algs])
+mse_s.to_csv(os.path.join(folder,'MSE-std.csv'),columns=alg_names[:num_algs])

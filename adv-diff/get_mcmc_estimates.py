@@ -52,81 +52,81 @@ meshsz_latent = (21,21)
 adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif_latent.prior.V=adif_latent.prior.Vh
 
-##------ define networks ------##
-# training data algorithms
-algs=['EKI','EKS']
-num_algs=len(algs)
-alg_no=1
-# load data
-ensbl_sz = 500
-folder = './train_NN_eldeg'+str(eldeg)
-
-##---- AUTOENCODER ----##
-AE={0:'ae',1:'cae',2:'vae'}[0]
-# prepare for training data
-if 'c' in AE:
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
-    X=loaded['X']
-    X=X[:,:-1,:-1,None]
-else :
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
-    X=loaded['X']
-num_samp=X.shape[0]
-# n_tr=np.int(num_samp*.75)
-# x_train=X[:n_tr]
-# x_test=X[n_tr:]
-tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
-te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
-x_train,x_test=X[tr_idx],X[te_idx]
-# define autoencoder
-if AE=='ae':
-    half_depth=3; latent_dim=adif_latent.prior.V.dim()
-    droprate=0.
-    activation='elu'
-#     activation=tf.keras.layers.LeakyReLU(alpha=1.5)
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-    lambda_=0.
-    autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
-                            activation=activation, optimizer=optimizer)
-elif AE=='cae':
-    num_filters=[16,8]; latent_dim=adif_latent.prior.V.dim()
-#     activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None} # [16,1]
-    activations={'conv':'elu','latent':'linear'}
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    autoencoder=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
-                                activations=activations, optimizer=optimizer)
-elif AE=='vae':
-        half_depth=5; latent_dim=adif_latent.prior.V.dim()
-        repatr_out=False; beta=1.
-        activation='elu'
-#         activation=tf.keras.layers.LeakyReLU(alpha=0.01)
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
-        autoencoder=VAE(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, repatr_out=repatr_out,
-                        activation=activation, optimizer=optimizer, beta=beta)
-f_name=[AE+'_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
-# load autoencoder
-try:
-    autoencoder.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
-    print(f_name[0]+' has been loaded!')
-    autoencoder.encoder=load_model(os.path.join(folder,f_name[1]+'.h5'),custom_objects={'loss':None})
-    print(f_name[1]+' has been loaded!')
-    autoencoder.decoder=load_model(os.path.join(folder,f_name[2]+'.h5'),custom_objects={'loss':None})
-    print(f_name[2]+' has been loaded!')
-except:
-    print('\nNo autoencoder found. Training {}...\n'.format(AE))
-    epochs=200
-    patience=0
-    noise=0.
-    kwargs={'patience':patience}
-    if AE=='ae' and noise: kwargs['noise']=noise
-    autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,**kwargs)
-    # save autoencoder
-    autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
-    autoencoder.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
-    autoencoder.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
+# ##------ define networks ------##
+# # training data algorithms
+# algs=['EKI','EKS']
+# num_algs=len(algs)
+# alg_no=1
+# # load data
+# ensbl_sz = 500
+# folder = './train_NN_eldeg'+str(eldeg)
+#
+# ##---- AUTOENCODER ----##
+# AE={0:'ae',1:'cae',2:'vae'}[0]
+# # prepare for training data
+# if 'c' in AE:
+#     loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XimgY.npz'))
+#     X=loaded['X']
+#     X=X[:,:-1,:-1,None]
+# else :
+#     loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+#     X=loaded['X']
+# num_samp=X.shape[0]
+# # n_tr=np.int(num_samp*.75)
+# # x_train=X[:n_tr]
+# # x_test=X[n_tr:]
+# tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
+# te_idx=np.setdiff1d(np.arange(num_samp),tr_idx)
+# x_train,x_test=X[tr_idx],X[te_idx]
+# # define autoencoder
+# if AE=='ae':
+#     half_depth=3; latent_dim=adif_latent.prior.V.dim()
+#     droprate=0.
+#     activation='elu'
+# #     activation=tf.keras.layers.LeakyReLU(alpha=1.5)
+#     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+#     lambda_=0.
+#     autoencoder=AutoEncoder(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, droprate=droprate,
+#                             activation=activation, optimizer=optimizer)
+# elif AE=='cae':
+#     num_filters=[16,8]; latent_dim=adif_latent.prior.V.dim()
+# #     activations={'conv':tf.keras.layers.LeakyReLU(alpha=0.1),'latent':None} # [16,1]
+#     activations={'conv':'elu','latent':'linear'}
+#     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
+#     autoencoder=ConvAutoEncoder(x_train.shape[1:], num_filters=num_filters, latent_dim=latent_dim,
+#                                 activations=activations, optimizer=optimizer)
+# elif AE=='vae':
+#         half_depth=5; latent_dim=adif_latent.prior.V.dim()
+#         repatr_out=False; beta=1.
+#         activation='elu'
+# #         activation=tf.keras.layers.LeakyReLU(alpha=0.01)
+#         optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)
+#         autoencoder=VAE(x_train.shape[1], half_depth=half_depth, latent_dim=latent_dim, repatr_out=repatr_out,
+#                         activation=activation, optimizer=optimizer, beta=beta)
+# f_name=[AE+'_'+i+'_'+algs[alg_no]+str(ensbl_sz) for i in ('fullmodel','encoder','decoder')]
+# # load autoencoder
+# try:
+#     autoencoder.model=load_model(os.path.join(folder,f_name[0]+'.h5'),custom_objects={'loss':None})
+#     print(f_name[0]+' has been loaded!')
+#     autoencoder.encoder=load_model(os.path.join(folder,f_name[1]+'.h5'),custom_objects={'loss':None})
+#     print(f_name[1]+' has been loaded!')
+#     autoencoder.decoder=load_model(os.path.join(folder,f_name[2]+'.h5'),custom_objects={'loss':None})
+#     print(f_name[2]+' has been loaded!')
+# except:
+#     print('\nNo autoencoder found. Training {}...\n'.format(AE))
+#     epochs=200
+#     patience=0
+#     noise=0.
+#     kwargs={'patience':patience}
+#     if AE=='ae' and noise: kwargs['noise']=noise
+#     autoencoder.train(x_train,x_test=x_test,epochs=epochs,batch_size=64,verbose=1,**kwargs)
+#     # save autoencoder
+#     autoencoder.model.save(os.path.join(folder,f_name[0]+'.h5'))
+#     autoencoder.encoder.save(os.path.join(folder,f_name[1]+'.h5'))
+#     autoencoder.decoder.save(os.path.join(folder,f_name[2]+'.h5'))
 
 # algorithms
-algs=['infHMC']
+algs=['pCN','infMALA','infHMC']
 alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC','DR-$\infty$-HMC')
 num_algs=len(algs)
 # obtain estimates

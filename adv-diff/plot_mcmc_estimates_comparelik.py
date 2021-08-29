@@ -2,7 +2,7 @@
 Plot estimates of uncertainty field u in Advection-Diffusion inverse problem.
 Shiwei Lan @ U of Warwick, 2016
 -------------------------------
-Modified for DREAM December 2020 @ ASU
+Modified for STIP August 2021 @ ASU
 """
 
 import os,pickle
@@ -49,10 +49,10 @@ nref = 1
 adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
 adif.prior.V=adif.prior.Vh
 # adif.misfit.obs=np.array([dat.get_local() for dat in adif.misfit.d.data]).flatten()
-# set up latent
-meshsz_latent = (21,21)
-adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
-adif_latent.prior.V=adif_latent.prior.Vh
+# # set up latent
+# meshsz_latent = (21,21)
+# adif_latent = advdiff(mesh=meshsz_latent, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
+# adif_latent.prior.V=adif_latent.prior.Vh
 
 # ##------ define networks ------##
 # # training data algorithms
@@ -222,12 +222,27 @@ else:
             samp_f.vector().set_local(std_v[i])
             f.write(samp_f,algs[i])
 
+# load data with simple likelihood model
+folder0 = '../../../BUQae/code/ad_diff/analysis_eldeg'+str(eldeg)
+mean_v0=MultiVector(adif.prior.gen_vector(),num_algs)
+std_v0=MultiVector(adif.prior.gen_vector(),num_algs)
+if os.path.exists(os.path.join(folder0,'mcmc_mean_.h5')) and os.path.exists(os.path.join(folder0,'mcmc_std_.h5')):
+    samp_f=df.Function(adif.prior.V,name="mv")
+    with df.HDF5File(adif.mpi_comm,os.path.join(folder0,'mcmc_mean_.h5'),"r") as f:
+        for i in range(num_algs):
+            f.read(samp_f,algs[i])
+            mean_v0[i].set_local(samp_f.vector())
+    with df.HDF5File(adif.mpi_comm,os.path.join(folder0,'mcmc_std_.h5'),"r") as f:
+        for i in range(num_algs):
+            f.read(samp_f,algs[i])
+            std_v0[i].set_local(samp_f.vector())
+
 # plot
 # num_algs-=1
 plt.rcParams['image.cmap'] = 'jet'
-num_rows=1
+num_rows=2
 # posterior mean
-fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,4))
+fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((2*num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,8))
 sub_figs = [None]*len(axes.flat)
 for i,ax in enumerate(axes.flat):
     plt.axes(ax)
@@ -244,8 +259,8 @@ for i,ax in enumerate(axes.flat):
 #         except:
 #             pass
 #     elif 1<=i<=num_algs:
-    sub_figs[i]=df.plot(vec2fun(mean_v[i],adif.prior.V))
-    ax.set_title(alg_names[i])
+    sub_figs[i]=df.plot(vec2fun(mean_v0[i] if i<axes.shape[1] else mean_v[i%axes.shape[1]],adif.prior.V))
+    ax.set_title(alg_names[i%axes.shape[1]])
     ax.set_aspect('auto')
     plt.axis([0, 1, 0, 1])
 # set color bar
@@ -256,16 +271,16 @@ fig=common_colorbar(fig,axes,sub_figs)
 plt.subplots_adjust(wspace=0.1, hspace=0.2)
 # save plot
 # fig.tight_layout()
-plt.savefig(folder+'/mcmc_estimates_mean.png',bbox_inches='tight')
+plt.savefig(folder+'/mcmc_estimates_mean_comparelik.png',bbox_inches='tight')
 # plt.show()
 
 # posterior std
-fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,4))
+fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((2*num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,8))
 sub_figs = [None]*len(axes.flat)
 for i,ax in enumerate(axes.flat):
     plt.axes(ax)
-    sub_figs[i]=df.plot(vec2fun(std_v[i],adif.prior.V))
-    ax.set_title(alg_names[i])
+    sub_figs[i]=df.plot(vec2fun(std_v0[i] if i<axes.shape[1] else std_v[i%axes.shape[1]],adif.prior.V))
+    ax.set_title(alg_names[i%axes.shape[1]])
     ax.set_aspect('auto')
     plt.axis([0, 1, 0, 1])
 # set color bar
@@ -276,5 +291,5 @@ fig=common_colorbar(fig,axes,sub_figs)
 plt.subplots_adjust(wspace=0.1, hspace=0.2)
 # save plot
 # fig.tight_layout()
-plt.savefig(folder+'/mcmc_estimates_std.png',bbox_inches='tight')
+plt.savefig(folder+'/mcmc_estimates_std_comparelik.png',bbox_inches='tight')
 # plt.show()

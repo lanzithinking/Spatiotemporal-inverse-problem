@@ -14,7 +14,7 @@ https://github.com/lanzithinking/Spatiotemporal-inverse-problem
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -24,7 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import sys
-import os
+import os, pickle
 # sys.path.append( os.environ.get('HIPPYLIB_BASE_DIR', "../../") )
 from hippylib import *
 from pde import TimeDependentAD
@@ -33,6 +33,7 @@ sys.path.append( "../" )
 from util.common_colorbar import common_colorbar
 from util.stgp.GP import GP
 from util.stgp.STGP import STGP
+from util.stgp.STGP_mg import STGP_mg
 
 class SpaceTimePointwiseStateObservation(Misfit):
     """
@@ -61,7 +62,7 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.rel_noise = rel_noise
         # obtain observations
         if d is None:
-            d=self.get_observations(pde=kwargs.pop('pde',None), nref=kwargs.pop('nref',0), init=kwargs.pop('pde',None))
+            d=self.get_observations(**kwargs)
             if self.rank == 0:
                 sep = "\n"+"#"*80+"\n"
                 print( sep, "Generate synthetic observations at {0} locations for {1} time points".format(self.targets.shape[0], len(self.observation_times)), sep )
@@ -72,10 +73,11 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.STlik = kwargs.pop('STlik',True)
         if self.STlik:
             # define STGP kernel for the likelihood (misfit)
-            # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), sigma2=2, jit=1e-2)
-            Cx=GP(self.targets, l=.5)
-            Ct=GP(self.observation_times, store_eig=True, l=.1)
-            self.stgp=STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',2))
+            # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
+            Cx=GP(self.targets, l=.5, jit=1e-2, sigma2=.1)
+            Ct=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1)
+            self.stgp=STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',0), spdapx=False)
+            # self.stgp=STGP_mg(STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',2)), K=1)
         
     def prep_container(self, Vh=None):
         """
@@ -95,34 +97,59 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.B.init_vector(self.Bu_snapshot, 0)
         self.B.init_vector(self.d_snapshot, 0)
     
-    def get_observations(self, pde=None, nref=0, init=None):
+    def get_observations(self, **kwargs):
         """
         Get the observations at given locations and time points
         """
-        # pde for observations
-        if pde is None:
-            mesh = self.Vh.mesh()
-            for i in range(nref): mesh = dl.refine(mesh) # refine mesh to obtain observations
-            pde = TimeDependentAD(mesh)
-        elif nref>0:
-            mesh = pde.mesh
-            for i in range(nref): mesh = dl.refine(mesh) # refine mesh to obtain observations
-            pde = TimeDependentAD(mesh)
-        # initial condition
-        if init is None:
-            true_init = dl.Expression('min(0.5,exp(-100*(pow(x[0]-0.35,2) +  pow(x[1]-0.7,2))))', element=pde.Vh[STATE].ufl_element())
-            init = dl.interpolate(true_init, pde.Vh[STATE]).vector()
-        # prepare container for observations
-        self.prep_container(pde.Vh[STATE])
-        
-        utrue = pde.generate_vector(STATE)
-        x = [utrue, init, None]
-        pde.solveFwd(x[STATE], x)
-        self.observe(x, self.d)
-        MAX = self.d.norm("linf", "linf")
-        noise_std_dev = self.rel_noise * MAX
-        parRandom.normal_perturb(noise_std_dev,self.d)
-        self.noise_variance = noise_std_dev*noise_std_dev
+        fld=kwargs.pop('obs_file_loc',os.getcwd())
+        try:
+            f=open(os.path.join(fld,'AdvDiff_obs.pckl'),'rb')
+            obs,self.noise_variance=pickle.load(f)
+            f.close()
+            self.prep_container()
+            for i,t in enumerate(self.observation_times):
+                self.d_snapshot.set_local(obs[i])
+                self.d.store(self.d_snapshot,t)
+            print('Observation file has been read!')
+        except Exception as e:
+            print(e)
+            pde=kwargs.pop('pde',None)
+            nref=kwargs.pop('nref',0)
+            init=kwargs.pop('pde',None)
+            # pde for observations
+            if pde is None:
+                mesh = self.Vh.mesh()
+                for i in range(nref): mesh = dl.refine(mesh) # refine mesh to obtain observations
+                pde = TimeDependentAD(mesh)
+            elif nref>0:
+                mesh = pde.mesh
+                for i in range(nref): mesh = dl.refine(mesh) # refine mesh to obtain observations
+                pde = TimeDependentAD(mesh)
+            # initial condition
+            if init is None:
+                true_init = dl.Expression('min(0.5,exp(-100*(pow(x[0]-0.35,2) +  pow(x[1]-0.7,2))))', element=pde.Vh[STATE].ufl_element())
+                init = dl.interpolate(true_init, pde.Vh[STATE]).vector()
+            # prepare container for observations
+            self.prep_container(pde.Vh[STATE])
+            
+            utrue = pde.generate_vector(STATE)
+            x = [utrue, init, None]
+            pde.solveFwd(x[STATE], x)
+            self.observe(x, self.d)
+            MAX = self.d.norm("linf", "linf")
+            noise_std_dev = self.rel_noise * MAX
+            parRandom.normal_perturb(noise_std_dev,self.d)
+            self.noise_variance = noise_std_dev*noise_std_dev
+            
+            # save
+            obs = []
+            for t in self.observation_times:
+                self.d.retrieve(self.d_snapshot, t)
+                obs.append(self.d_snapshot.get_local())
+            obs = np.stack(obs)
+            f=open(os.path.join(fld,'AdvDiff_obs.pckl'),'wb')
+            pickle.dump([obs,self.noise_variance],f)
+            f.close()
         return self.d.copy()
     
     def observe(self, x, obs):
@@ -201,7 +228,7 @@ class SpaceTimePointwiseStateObservation(Misfit):
     def apply_ij(self, i,j, direction, out):
         out.zero()
         if i == STATE and j == STATE:
-            if self.STlik:
+            if self.misfit.STlik:
                 du = []
                 for t in self.observation_times:
                     direction.retrieve(self.u_snapshot, t)

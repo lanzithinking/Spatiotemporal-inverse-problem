@@ -17,15 +17,15 @@ sys.path.append( "../" )
 from sampler.geoinfMC_dolfin import geoinfMC
 
 np.set_printoptions(precision=3, suppress=True)
-seed=2020
-np.random.seed(seed)
+# seed=2020
+# np.random.seed(seed)
 
-def main():
+def main(seed=2020):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.005,.02,.02,None,None])
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.005,.005,None,None]) # [.001,.005,.005] simple likelihood model
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
@@ -37,11 +37,11 @@ def main():
     gamma = 2.; delta = 10.
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=True)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=False)
     adif.prior.V=adif.prior.Vh
     
     # initialization
-#     unknown=adif.prior.gen_vector()
+    # unknown=adif.prior.gen_vector()
     unknown=adif.prior.sample(whiten=False)
 #     MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
 #     if os.path.isfile(MAP_file):
@@ -79,4 +79,11 @@ def main():
 #     print(pde_cnt)
 
 if __name__ == '__main__':
-    main()
+    # main()
+    # set random seed
+    seeds = [2020+i*10 for i in range(1,10)]
+    n_seed = len(seeds)
+    for i in range(n_seed):
+        print("Running for seed %d ...\n"% (seeds[i]))
+        np.random.seed(seeds[i])
+        main(seed=seeds[i])
