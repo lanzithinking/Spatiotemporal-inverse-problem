@@ -71,11 +71,16 @@ class SpaceTimePointwiseStateObservation(Misfit):
         self.d.axpy(1., d)
         
         self.STlik = kwargs.pop('STlik',True)
+        
+        
         if self.STlik:
             # define STGP kernel for the likelihood (misfit)
             # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-            Cx=GP(self.targets, l=.5, jit=1e-2, sigma2=.1)
-            Ct=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1)
+            self.lx = kwargs.pop('lx',.5)
+            self.lt = kwargs.pop('lt',.2)
+            self.sigmat = kwargs.pop('sigmat',1) #conjugate for model 0 just set sigmax=1
+            Cx=GP(self.targets, l=self.lx, jit=1e-2, sigma2=.1)
+            Ct=GP(self.observation_times, store_eig=True, l=self.lt, sigma2=self.sigmat)
             self.stgp=STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',0), spdapx=False)
             # self.stgp=STGP_mg(STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',2)), K=1)
         
@@ -163,9 +168,10 @@ class SpaceTimePointwiseStateObservation(Misfit):
             self.B.mult(self.u_snapshot, self.Bu_snapshot)
             obs.store(self.Bu_snapshot, t)
             
-    def cost(self, x):
+    def cost(self, x, option='-loglik'):
         """
         Compute misfit
+        option: return -loglike or diff where loglike = halfdelt+quad/diff
         """
         if self.STlik:
             du = []
@@ -176,7 +182,10 @@ class SpaceTimePointwiseStateObservation(Misfit):
                 self.Bu_snapshot.axpy(-1., self.d_snapshot)
                 du.append(self.Bu_snapshot.get_local())
             du = np.stack(du).T # (I,J)
-            res = -self.stgp.matn0pdf(du)[0]#,nu=self.noise_variance)[0]
+            if option=='-loglik':
+                res = -self.stgp.matn0pdf(du)[0]#,nu=self.noise_variance)[0]
+            elif option=='diff': #1/2(y-G(u))'C^(-1)(y-G(u))
+                res = -(self.stgp.matn0pdf(du)[0] - self.stgp.matn0pdf(du)[1])
         else:
             c = 0
             for t in self.observation_times:
