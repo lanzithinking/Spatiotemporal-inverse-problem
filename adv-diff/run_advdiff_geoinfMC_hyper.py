@@ -20,7 +20,8 @@ sys.path.append( "../" )
 from sampler.geoinfMC_dolfin import geoinfMC
 from sampler.slice import slice_samp
 
-
+import warnings
+warnings.filterwarnings("ignore")
 np.set_printoptions(precision=3, suppress=True)
 # seed=2020
 # np.random.seed(seed)
@@ -81,7 +82,7 @@ def main(seed=2020):
     # optimize initial values
     sigma2,eta,inf_GMC,objf = opt4ini(sigma2,eta,inf_GMC,a,b,m,V,Nmax=20);
 
-    
+
     ######  MCMC  ############################################################################
     """
     sample with given MCMC method
@@ -93,14 +94,14 @@ def main(seed=2020):
         print(inf_GMC.alg_name, 'not found!')
     else:
         print('\nRunning '+inf_GMC.alg_name+' now...\n')
-
+    
     # allocate space to store results
     
     samp_fname='_samp_'+inf_GMC.alg_name+'_dim'+str(inf_GMC.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")
     samp_fpath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(samp_fpath):
         os.makedirs(samp_fpath)
-#         inf_GMC.samp=df.File(os.path.join(samp_fpath,samp_fname+".xdmf"))
+    #         inf_GMC.samp=df.File(os.path.join(samp_fpath,samp_fname+".xdmf"))
     inf_GMC.samp=df.HDF5File(inf_GMC.model.pde.mpi_comm,os.path.join(samp_fpath,samp_fname+".h5"),"w")
     inf_GMC.loglik=np.zeros(args.num_samp+args.num_burnin)
     inf_GMC.acpt=0.0 # final acceptance rate
@@ -127,7 +128,7 @@ def main(seed=2020):
     PARAMETER = 1
     STATE = 0
     num_retry_bad=0
-    
+
     for s in range(args.num_samp+args.num_burnin):
 
         if s==args.num_burnin:
@@ -170,16 +171,15 @@ def main(seed=2020):
         beta = b+dltb;
         
         if not opthypr:
-    #         sigma2_=1./gamrnd(alpha,1./beta); % sample
+        #         sigma2_=1./gamrnd(alpha,1./beta); % sample
             sigma2=1/spst.gamma.rvs(alpha,scale=1/beta);
-            l_sigma2=np.log(spst.gamma.pdf(1/sigma2,alpha,scale=1/beta))-2*np.log(sigma2);
-            
+            l_sigma2=np.log(spst.gamma.pdf(1/sigma2,alpha,scale=1/beta))-2*np.log(sigma2);  
         else:
             sigma2=beta/(alpha+1); # optimize
             l_sigma2=(np.log(spst.gamma.pdf(1/sigma2,alpha,scale=1/beta))-2*np.log(sigma2));
             
         inf_GMC.model.misfit.stgp.update(C_t=inf_GMC.model.misfit.stgp.C_t.update(sigma2 = sigma2))
-        
+
         
         # update eta
         # eta_x
@@ -200,13 +200,13 @@ def main(seed=2020):
         # eta_t
         logf2 =lambda eta:logf(eta,inf_GMC,m[1],V[1],2)
         if not opthypr:
-            eta[1], l_eta_t = slice_samp(eta[1],logf1(eta[1]),logf2);
+            eta[1], l_eta_t = slice_samp(eta[1],logf2(eta[1]),logf2);
         elif not jtupt:
             minuslogf2 = lambda q: -logf2(q)
             res=minimize(minuslogf2,eta[1],method='BFGS',
                            options={'gtol': 1e-6, 'disp': False, 'maxiter': 100 });
             eta[1], l_eta_t = res.x,-res.fun
-        
+
         inf_GMC.model.misfit.stgp.update(C_x=inf_GMC.model.misfit.stgp.C_x.update(l = np.exp(eta[0])),
                                         C_t=inf_GMC.model.misfit.stgp.C_t.update(l = np.exp(eta[1])))
         
@@ -216,7 +216,7 @@ def main(seed=2020):
             accp=0.0
 
         # save results
-        inf_GMC.loglik[s]=inf_GMC.ll
+        inf_GMC.loglik[s]=inf_GMC.geom(inf_GMC.q)[0] #inf_GMC.ll
         samp_sigma2[s,:] = sigma2, l_sigma2
         samp_eta_x[s,:] = eta[0], l_eta_x
         samp_eta_t[s,:] = eta[1], l_eta_t

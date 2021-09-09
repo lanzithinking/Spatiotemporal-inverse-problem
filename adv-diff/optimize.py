@@ -13,13 +13,13 @@ import copy
 
 
 def logf(eta, inf_GMC, m, V, option=1):
-    # return the log posterior = loglik + logpri
+    # return the log posterior(eta) = loglik + logpri
     # option=1: logposterior for x, option=2: logposterior for t
     if option==1:
         inf_GMC.model.misfit.stgp.update(C_x=inf_GMC.model.misfit.stgp.C_x.update(l = np.exp(eta)))
     elif option==2:
         inf_GMC.model.misfit.stgp.update(C_t=inf_GMC.model.misfit.stgp.C_t.update(l = np.exp(eta)))
-    loglik = inf_GMC.ll
+    loglik = inf_GMC.geom(inf_GMC.q)[0]
     logpri = -.5*(eta-m)**2/V
     return (loglik + logpri)
         
