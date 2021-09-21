@@ -132,3 +132,8 @@ dmypy.json
 **/data
 **/result
 **/doc
+
+# OS generated files #
+######################
+.DS_Store
+.DS_Store?
