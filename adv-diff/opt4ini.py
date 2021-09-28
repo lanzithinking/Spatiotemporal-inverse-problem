@@ -58,7 +58,7 @@ def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(2,dtype=bool), jtopt=True,
                 eta[1], nl_eta[1] = res.x,res.fun
                 objf[1] = np.sum(nl_eta)
             else:
-                logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1]).sum()
+                logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1])
                 res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
                 eta, nl_eta = res.x,res.fun
             inf_GMC.model.misfit.stgp.update(C_x=inf_GMC.model.misfit.stgp.C_x.update(l = np.exp(eta[0])),

@@ -37,11 +37,13 @@ def main(seed=2020):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.001,.007,None,None]) # [.001,.005,.005] simple likelihood model
+    parser.add_argument('num_burnin', nargs='?', type=int, default=5000)
+    parser.add_argument('thin', nargs='?', type=int, default=5)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.01,.01,.01,None,None]) # [.001,.005,.005] simple likelihood model
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
+    upthypr = 1 # 0: no update; 1: sample; 2; optimize; 3: optimize jointly
     
     ## define Advection-Diffusion inverse problem ##
     # mesh = df.Mesh('ad_10k.xml')
@@ -53,35 +55,34 @@ def main(seed=2020):
     adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=True)
     adif.prior.V=adif.prior.Vh
     
-    # specify (hyper)-priors
+    # specify (hyper)-priorsx
     # (a,b) in inv-gamma priors for sigma2_t
     # (m,V) in (log) normal priors for eta_*, (eta=log-rho), * = x, t
-    a = 2
-    b = 1e0
+    a = 2.
+    b = 1e-1
     m = [0,0]
-    V = np.asarray([.1,.1])
-    upthypr = 1 # 0: no update; 1: sample; 2; optimize; 3: optimize jointly
+    V = np.asarray([1.,10.])
     if upthypr:
         opts_unc={'gtol': 1e-6, 'disp': False, 'maxiter': 100}
     
     # initialization
     sigma2=spst.invgamma.rvs(a, scale=b);# 1/spst.gamma.rvs(a, scale=1/b);for sigma2_t
     eta=spst.norm.rvs(m,np.sqrt(V));
-    adif.misfit.stgp.update(C_x=adif.misfit.stgp.C_x.update(l = np.exp(eta[0])),
+    adif.misfit.stgp.update(C_x=adif.misfit.stgp.C_x.update(sigma2 = 1., l = np.exp(eta[0])),
                             C_t=adif.misfit.stgp.C_t.update(sigma2 = sigma2, l = np.exp(eta[1])))
     dlta=adif.misfit.stgp.I*adif.misfit.stgp.J/2;
     alpha = a+dlta;
     # unknown=adif.prior.gen_vector()
-    # unknown=adif.prior.sample(whiten=False)
-    MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
-    if os.path.isfile(MAP_file):
-        unknown=df.Function(adif.prior.V, name='MAP')
-        f=df.XDMFFile(adif.mpi_comm,MAP_file)
-        f.read_checkpoint(unknown,'m',0)
-        f.close()
-        unknown = unknown.vector()
-    else:
-        unknown=adif.get_MAP(SAVE=True)
+    unknown=adif.prior.sample(whiten=False)
+    # MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
+    # if os.path.isfile(MAP_file):
+    #     unknown=df.Function(adif.prior.V, name='MAP')
+    #     f=df.XDMFFile(adif.mpi_comm,MAP_file)
+    #     f.read_checkpoint(unknown,'m',0)
+    #     f.close()
+    #     unknown = unknown.vector()
+    # else:
+    #     unknown=adif.get_MAP(SAVE=True)
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for %d step(s)..."
@@ -98,18 +99,19 @@ def main(seed=2020):
     # sigma2,eta,inf_GMC,optimf = opt4ini(sigma2,eta,inf_GMC,a,b,m,V,jtopt=upthypr==3,Nmax=20);
     
     # allocate space to store results
+    num_iters=args.num_samp*args.thin+args.num_burnin
     samp_sigma2=np.zeros((args.num_samp,1))
     samp_eta=np.zeros((args.num_samp,2))
-    engy=np.zeros((args.num_samp+args.num_burnin,3))
+    engy=np.zeros((num_iters,3))
     samp_fname='_samp_'+inf_GMC.alg_name+'_dim'+str(inf_GMC.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")
     samp_fpath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(samp_fpath):
         os.makedirs(samp_fpath)
     #         inf_GMC.samp=df.File(os.path.join(samp_fpath,samp_fname+".xdmf"))
     inf_GMC.samp=df.HDF5File(inf_GMC.model.pde.mpi_comm,os.path.join(samp_fpath,samp_fname+".h5"),"w")
-    inf_GMC.loglik=np.zeros(args.num_samp+args.num_burnin)
+    inf_GMC.loglik=np.zeros(num_iters)
     inf_GMC.acpt=0.0 # final acceptance rate
-    inf_GMC.times=np.zeros(args.num_samp+args.num_burnin) # record the history of time used for each sample
+    inf_GMC.times=np.zeros(num_iters) # record the history of time used for each sample
     
     """
     sample with given MCMC method
@@ -132,16 +134,16 @@ def main(seed=2020):
     num_retry_bad=0
     
     beginning=timeit.default_timer()
-    for s in range(args.num_samp+args.num_burnin):
+    for s in range(num_iters):
 
         if s==args.num_burnin:
             # start the timer
             tic=timeit.default_timer()
             print('\nBurn-in completed; recording samples now...\n')
-
+        
         # update sigma2
         dltb = inf_GMC.model.misfit.cost(inf_GMC.model.x, option='quad')*sigma2
-        beta = b+dltb;
+        beta = b+dltb; nl_sigma2=0
         if upthypr==1:
             sigma2=spst.invgamma.rvs(a, scale=beta); #1/spst.gamma.rvs(alpha,scale=1/beta);
             # nl_sigma2=-(spst.gamma.logpdf(1/sigma2,alpha,scale=1/beta)-2*np.log(sigma2));
@@ -152,7 +154,6 @@ def main(seed=2020):
             nl_sigma2=-spst.invgamma.logpdf(sigma2,alpha,scale=beta)
         if upthypr:
             inf_GMC.model.misfit.stgp.update(C_t=inf_GMC.model.misfit.stgp.C_t.update(sigma2 = sigma2))
-
         
         # update eta
         logf=[]; nl_eta=np.zeros(2)
@@ -177,6 +178,7 @@ def main(seed=2020):
             logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1]).sum()
             res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
             eta, nl_eta = res.x,res.fun
+            nl_eta = (nl_eta,np.nan)
         if upthypr:
             inf_GMC.model.misfit.stgp.update(C_x=inf_GMC.model.misfit.stgp.C_x.update(l = np.exp(eta[0])),
                                              C_t=inf_GMC.model.misfit.stgp.C_t.update(l = np.exp(eta[1])))
@@ -215,13 +217,14 @@ def main(seed=2020):
         if (s+1)%100==0:
             print('\nAcceptance at %d iterations: %0.2f' % (s+1,accp/100))
             accp=0.0
-
+        
         # save results
         inf_GMC.loglik[s]=inf_GMC.ll # inf_GMC.geom(inf_GMC.q)[0]
         engy[s] = np.concatenate(((nl_sigma2,), nl_eta))
-        if s>=args.num_burnin:
-            samp_sigma2[s] = sigma2
-            samp_eta[s] = eta
+        if s>=args.num_burnin and (s-args.num_burnin)%args.thin==0:
+            NO_sav=(s-args.num_burnin)//args.thin
+            samp_sigma2[NO_sav] = sigma2
+            samp_eta[NO_sav] = eta
             # inf_GMC.samp << vec2fun(inf_GMC.q,inf_GMC.model.prior.V,name='sample_{0}'.format(s-args.num_burnin))
             q_f=df.Function(inf_GMC.model.prior.V)
             # q_f.vector()[:]=inf_GMC.q
@@ -229,7 +232,7 @@ def main(seed=2020):
             q_f.vector().apply('insert')
             # q_f.vector().zero()
             # q_f.vector().axpy(1.,inf_GMC.q)
-            inf_GMC.samp.write(q_f,'sample_{0}'.format(s-args.num_burnin))
+            inf_GMC.samp.write(q_f,'sample_{0}'.format(NO_sav))
             inf_GMC.acpt+=acpt_idx
         
         # record the time
@@ -245,7 +248,7 @@ def main(seed=2020):
                 inf_GMC.h_adpt['h']=np.exp(inf_GMC.h_adpt['loghn'])
                 inf_GMC.h=inf_GMC.h_adpt['h']
                 print('Adaptation completed; step size freezed at:  %.6f\n' % inf_GMC.h_adpt['h'])
-
+    
     # stop timer
     inf_GMC.samp.close()
     toc=timeit.default_timer()
@@ -253,7 +256,7 @@ def main(seed=2020):
     inf_GMC.acpt/=args.num_samp
     print("\nAfter %g seconds, %d samples have been collected with the final acceptance rate %0.2f \n"
           % (inf_GMC.time,args.num_samp,inf_GMC.acpt))
-
+    
     # save to file
     inf_GMC.save_samp()
     #### MCMC(done) ############################################################################
