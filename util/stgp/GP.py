@@ -189,7 +189,7 @@ class GP:
             tol=kwargs.pop('tol',1e-10)
             C_op=self.tomat() if not self.spdapx else spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,**kwargs))
             try:
-                eigv,eigf=spsla.eigsh(C_op,L,maxiter=maxiter,tol=tol)
+                eigv,eigf=spsla.eigsh(C_op,min(L,C_op.shape[0]-1),maxiter=maxiter,tol=tol)
             except Exception as divg:
                 print(*divg.args)
                 eigv,eigf=divg.eigenvalues,divg.eigenvectors
