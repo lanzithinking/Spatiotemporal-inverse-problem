@@ -20,6 +20,7 @@ STATE = 0; PARAMETER = 1
 # hyper-parameters
 from opt4ini import opt4ini
 from logpdf_hyperpars import *
+from geom_unknown import geom as geom_unknown
 
 # MCMC
 import sys
@@ -35,11 +36,11 @@ np.random.seed(seed)
 
 def main(seed=2020):
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=0)
+    parser.add_argument('algNO', nargs='?', type=int, default=2)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=5000)
-    parser.add_argument('thin', nargs='?', type=int, default=5)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.01,.01,.01,None,None]) # [.001,.005,.005] simple likelihood model
+    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
+    parser.add_argument('thin', nargs='?', type=int, default=1)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.004,.004,None,None]) # [.001,.005,.005] simple likelihood model
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
@@ -66,11 +67,12 @@ def main(seed=2020):
         opts_unc={'gtol': 1e-6, 'disp': False, 'maxiter': 100}
     
     # initialization
-    sigma2=spst.invgamma.rvs(a, scale=b);# 1/spst.gamma.rvs(a, scale=1/b);for sigma2_t
+    # sigma2=spst.invgamma.rvs(a, scale=b);# 1/spst.gamma.rvs(a, scale=1/b);for sigma2_t
+    sigma2=1.
     eta=spst.norm.rvs(m,np.sqrt(V));
     adif.misfit.stgp.update(C_x=adif.misfit.stgp.C_x.update(sigma2 = 1., l = np.exp(eta[0])),
                             C_t=adif.misfit.stgp.C_t.update(sigma2 = sigma2, l = np.exp(eta[1])))
-    dlta=adif.misfit.stgp.I*adif.misfit.stgp.J/2;
+    dlta=adif.misfit.stgp.N/2;
     alpha = a+dlta;
     # unknown=adif.prior.gen_vector()
     # unknown=adif.prior.sample(whiten=False)
@@ -89,6 +91,9 @@ def main(seed=2020):
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
     inf_GMC=geoinfMC(unknown,adif,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO])
+    geom_ord=[0]
+    if any(s in inf_GMC.alg_name for s in ['MALA','HMC']): geom_ord.append(1)
+    inf_GMC.geom=lambda parameter: geom_unknown(parameter, a=a,b=b,model=adif,geom_ord=geom_ord)
     # original sampling 
     # mc_fun=inf_GMC.sample
     # mc_args=(args.num_samp,args.num_burnin)
@@ -96,13 +101,13 @@ def main(seed=2020):
     
     ######  MCMC  ############################################################################
     # optimize initial values
-    # sigma2,eta,inf_GMC,optimf = opt4ini(sigma2,eta,inf_GMC,a,b,m,V,jtopt=upthypr==3,Nmax=20);
+    sigma2,eta,inf_GMC,optimf = opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=[0,1,1],jtopt=upthypr==3,Nmax=20);
     
     # allocate space to store results
     num_iters=args.num_samp*args.thin+args.num_burnin
-    samp_sigma2=np.zeros((args.num_samp,1))
+    # samp_sigma2=np.zeros((args.num_samp,1))
     samp_eta=np.zeros((args.num_samp,2))
-    engy=np.zeros((num_iters,3))
+    engy=np.zeros((num_iters,2))#3))
     samp_fname='_samp_'+inf_GMC.alg_name+'_dim'+str(inf_GMC.dim)+'_'+time.strftime("%Y-%m-%d-%H-%M-%S")
     samp_fpath=os.path.join(os.getcwd(),'result')
     if not os.path.exists(samp_fpath):
@@ -141,24 +146,24 @@ def main(seed=2020):
             tic=timeit.default_timer()
             print('\nBurn-in completed; recording samples now...\n')
         
-        # update sigma2
-        dltb = inf_GMC.model.misfit.cost(inf_GMC.model.x, option='quad')*sigma2
-        beta = b+dltb; nl_sigma2=0
-        if upthypr==1:
-            sigma2=spst.invgamma.rvs(a, scale=beta); #1/spst.gamma.rvs(alpha,scale=1/beta);
-            # nl_sigma2=-(spst.gamma.logpdf(1/sigma2,alpha,scale=1/beta)-2*np.log(sigma2));
-            nl_sigma2=-spst.invgamma.logpdf(sigma2,alpha,scale=beta)
-        elif upthypr>=2:
-            sigma2=beta/(alpha+1); # optimize
-            # nl_sigma2=-(spst.gamma.logpdf(1/sigma2,alpha,scale=1/beta)-2*np.log(sigma2));
-            nl_sigma2=-spst.invgamma.logpdf(sigma2,alpha,scale=beta)
-        if upthypr:
-            inf_GMC.model.misfit.stgp.update(C_t=inf_GMC.model.misfit.stgp.C_t.update(sigma2 = sigma2))
+        # # update sigma2
+        # dltb = inf_GMC.model.misfit.cost(inf_GMC.model.x, option='quad')*sigma2
+        # beta = b+dltb; nl_sigma2=0
+        # if upthypr==1:
+        #     sigma2=spst.invgamma.rvs(a, scale=beta); #1/spst.gamma.rvs(alpha,scale=1/beta);
+        #     # nl_sigma2=-(spst.gamma.logpdf(1/sigma2,alpha,scale=1/beta)-2*np.log(sigma2));
+        #     nl_sigma2=-spst.invgamma.logpdf(sigma2,alpha,scale=beta)
+        # elif upthypr>=2:
+        #     sigma2=beta/(alpha+1); # optimize
+        #     # nl_sigma2=-(spst.gamma.logpdf(1/sigma2,alpha,scale=1/beta)-2*np.log(sigma2));
+        #     nl_sigma2=-spst.invgamma.logpdf(sigma2,alpha,scale=beta)
+        # if upthypr:
+        #     inf_GMC.model.misfit.stgp.update(C_t=inf_GMC.model.misfit.stgp.C_t.update(sigma2 = sigma2))
         
         # update eta
         logf=[]; nl_eta=np.zeros(2)
         # eta_x
-        logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0]))
+        logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0], a=a, b=b))
         if upthypr==1:
             eta[0], l_eta = slice_sampler(eta[0],logf[0](eta[0]),logf[0]);
             nl_eta[0] = -l_eta
@@ -166,7 +171,7 @@ def main(seed=2020):
             res=minimize(lambda q: -logf[0](q),eta[0],method='BFGS',options=opts_unc);
             eta[0], nl_eta[0] = res.x,res.fun
         # eta_t
-        logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1]))
+        logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1], a=a, b=b))
         if upthypr==1:
             eta[1], l_eta = slice_sampler(eta[1],logf[1](eta[1]),logf[1]);
             nl_eta[1] = -l_eta
@@ -175,7 +180,7 @@ def main(seed=2020):
             eta[1], nl_eta[1] = res.x,res.fun
         # joint optimize
         if upthypr==3:
-            logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1])
+            logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1], a=a, b=b)
             res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
             eta, nl_eta = res.x,res.fun
             nl_eta = (nl_eta,np.nan)
@@ -220,10 +225,11 @@ def main(seed=2020):
         
         # save results
         inf_GMC.loglik[s]=inf_GMC.ll # inf_GMC.geom(inf_GMC.q)[0]
-        engy[s] = np.concatenate(((nl_sigma2,), nl_eta))
+        # engy[s] = np.concatenate(((nl_sigma2,), nl_eta))
+        engy[s] = nl_eta
         if s>=args.num_burnin and (s-args.num_burnin)%args.thin==0:
             NO_sav=(s-args.num_burnin)//args.thin
-            samp_sigma2[NO_sav] = sigma2
+            # samp_sigma2[NO_sav] = sigma2
             samp_eta[NO_sav] = eta
             # inf_GMC.samp << vec2fun(inf_GMC.q,inf_GMC.model.prior.V,name='sample_{0}'.format(s-args.num_burnin))
             q_f=df.Function(inf_GMC.model.prior.V)
@@ -268,7 +274,8 @@ def main(seed=2020):
     f=open(filename,'ab')
 #     soln_count=[adif.soln_count,adif.pde.soln_count]
     soln_count=adif.pde.soln_count
-    pickle.dump([samp_sigma2,samp_eta,engy,meshsz,rel_noise,nref,soln_count,args],f)
+    # pickle.dump([samp_sigma2,samp_eta,engy,meshsz,rel_noise,nref,soln_count,args],f)
+    pickle.dump([samp_eta,engy,meshsz,rel_noise,nref,soln_count,args],f)
     f.close()
 #     # verify with load
 #     f=open(filename,'rb')

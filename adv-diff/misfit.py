@@ -78,10 +78,10 @@ class SpaceTimePointwiseStateObservation(Misfit):
             if self.stgp is None:
                 # define STGP kernel for the likelihood (misfit)
                 # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-                Cx=GP(self.targets, l=.5, jit=1e-2, sigma2=.1)
-                Ct=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1, ker_opt='matern',nu=.5)
-                self.stgp=STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',0), spdapx=False)
-                # self.stgp=STGP_mg(STGP(spat=Cx, temp=Ct, opt=kwargs.pop('ker_opt',2)), K=1)
+                C_x=GP(self.targets, l=.5, jit=1e-2, sigma2=.1, store_eig=True)
+                C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1)#, ker_opt='matern',nu=.5)
+                self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
+                # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2)), K=1)
         
     def prep_container(self, Vh=None):
         """
@@ -181,11 +181,13 @@ class SpaceTimePointwiseStateObservation(Misfit):
                 self.Bu_snapshot.axpy(-1., self.d_snapshot)
                 du.append(self.Bu_snapshot.get_local())
             du = np.stack(du).T # (I,J)
-            if option=='nll':
-                res = -self.stgp.matn0pdf(du)[0]#,nu=self.noise_variance)[0]
-            elif option=='quad': #1/2(y-G(u))'C^(-1)(y-G(u))
-                logpdf,half_ldet = self.stgp.matn0pdf(du)
-                res = -(logpdf - half_ldet)
+            # if option=='nll':
+            #     res = -self.stgp.matn0pdf(du)[0]#,nu=self.noise_variance)[0]
+            # elif option=='quad': #1/2(y-G(u))'C^(-1)(y-G(u))
+            #     logpdf,half_ldet = self.stgp.matn0pdf(du)
+            #     res = -(logpdf - half_ldet)
+            logpdf,half_ldet = self.stgp.matn0pdf(du)
+            res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
         else:
             c = 0
             for t in self.observation_times:

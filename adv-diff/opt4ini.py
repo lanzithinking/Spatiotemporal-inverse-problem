@@ -49,16 +49,16 @@ def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(2,dtype=bool), jtopt=True,
             if not jtopt:
                 logf=[]; nl_eta=np.zeros(2)
                 # eta_x
-                logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0]))
+                logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0], a=a,b=b))
                 res=minimize(lambda q: -logf[0](q),eta[0],method='BFGS',options=opts_unc);
                 eta[0], nl_eta[0] = res.x,res.fun
                 # eta_t
-                logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1]))
+                logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1], a=a,b=b))
                 res=minimize(lambda q: -logf[1](q),eta[1],method='BFGS',options=opts_unc);
                 eta[1], nl_eta[1] = res.x,res.fun
                 objf[1] = np.sum(nl_eta)
             else:
-                logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1])
+                logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1], a=a,b=b)
                 res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
                 eta, nl_eta = res.x,res.fun
             inf_GMC.model.misfit.stgp.update(C_x=inf_GMC.model.misfit.stgp.C_x.update(l = np.exp(eta[0])),
