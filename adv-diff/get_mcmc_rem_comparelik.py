@@ -44,6 +44,7 @@ seed=2020
 meshsz = (61,61)
 eldeg = 1
 gamma = 2.; delta = 10.
+# observation_times = np.arange(1., 4.+.5*.1, .1)
 rel_noise = .5
 nref = 1
 adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
@@ -143,6 +144,7 @@ rem_s=np.zeros((num_mdls,num_algs))
 folder = './analysis_eldeg'+str(eldeg)
 for m in range(num_mdls):
     print('Processing '+lik_mdls[m]+' likelihood model...\n')
+    # fld_m = folder+('_fixedhyper/' if m==0 else '/')+lik_mdls[m]
     fld_m = folder+'/'+lik_mdls[m]
     # preparation for estimates
     hdf5_files=[f for f in os.listdir(fld_m) if f.endswith('.h5')]

@@ -21,7 +21,7 @@ https://github.com/lanzithinking/Spatiotemporal-inverse-problem
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2020, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -362,7 +362,7 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
         
         return eigs
     
-    def get_MAP(self,rand_init=False,preconditioner='posterior',SAVE=True):
+    def get_MAP(self,init='current',preconditioner='posterior',SAVE=False):
         """
         Get the maximum a posterior (MAP).
         """
@@ -371,8 +371,9 @@ class advdiff(TimeDependentAD,SpaceTimePointwiseStateObservation):
             sep = "\n"+"#"*80+"\n"
             print( sep, "Find the MAP point", sep)
         # set up initial point
-        m = self.prior.sample() if rand_init else self.generate_vector(PARAMETER)
-        self.x = self.generate_vector()
+        # m = self.prior.sample() if rand_init else self.generate_vector(PARAMETER)
+        m = {'current':self.x[PARAMETER], 'random':self.prior.sample(), 'zero':self.generate_vector(PARAMETER)}[init]
+        # self.x = self.generate_vector()
         self.x[PARAMETER] = m
         self.pde.solveFwd(self.x[STATE], self.x)
         mg = self._get_grad(m,MF_only=False)
@@ -572,17 +573,27 @@ if __name__ == '__main__':
     meshsz = (61,61)
     eldeg = 1
     gamma = 2.; delta = 10.
+    # observation_times = np.arange(1., 4.+.5*.1, .1)
     rel_noise = .5
     nref = 1
     adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
     # test
     adif.test(1e-8)
     # obtain MAP
-    map_v = adif.get_MAP(rand_init=False)
+    map_v = adif.get_MAP(init='zero',SAVE=True)
     fig=dl.plot(vector2Function(map_v,adif.pde.Vh[PARAMETER]))
     plt.colorbar(fig)
 #     plt.show()
     plt.savefig(os.path.join(os.getcwd(),'properties/map.png'),bbox_inches='tight')
+    # compare it with the truth
+    ic_expr = dl.Expression('min(0.5,exp(-100*(pow(x[0]-0.35,2) +  pow(x[1]-0.7,2))))', element=adif.prior.Vh.ufl_element())
+    true_param = dl.interpolate(ic_expr, adif.prior.Vh).vector()
+    relerr = (map_v-true_param).norm('l2')/true_param.norm('l2')
+    print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
+    # report the minimum cost
+    # min_cost = adif.misfit.cost(adif.x)
+    min_cost = adif._get_misfit(map_v)
+    print('Minimum cost: %.4f' % min_cost)
 #     # conversion
 #     v = adif.prior.sample()
 #     im = adif.vec2img(v)
