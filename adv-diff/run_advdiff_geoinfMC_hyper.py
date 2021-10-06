@@ -96,7 +96,7 @@ def main(seed=2020):
     
     ######  MCMC  ############################################################################
     # optimize initial values
-    # sigma2,eta,inf_GMC,optimf = opt4ini(sigma2,eta,inf_GMC,a,b,m,V,jtopt=upthypr==3,Nmax=20);
+    sigma2,eta,inf_GMC,optimf = opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=[1,1,1],jtopt=upthypr==3,Nmax=20);
     
     # allocate space to store results
     num_iters=args.num_samp*args.thin+args.num_burnin
@@ -158,7 +158,7 @@ def main(seed=2020):
         # update eta
         logf=[]; nl_eta=np.zeros(2)
         # eta_x
-        logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0]))
+        logf.append(lambda q: logpost_eta(q,inf_GMC.model,m[0],V[0],[0]))
         if upthypr==1:
             eta[0], l_eta = slice_sampler(eta[0],logf[0](eta[0]),logf[0]);
             nl_eta[0] = -l_eta
@@ -166,7 +166,7 @@ def main(seed=2020):
             res=minimize(lambda q: -logf[0](q),eta[0],method='BFGS',options=opts_unc);
             eta[0], nl_eta[0] = res.x,res.fun
         # eta_t
-        logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1]))
+        logf.append(lambda q: logpost_eta(q,inf_GMC.model,m[1],V[1],[1]))
         if upthypr==1:
             eta[1], l_eta = slice_sampler(eta[1],logf[1](eta[1]),logf[1]);
             nl_eta[1] = -l_eta
@@ -175,7 +175,7 @@ def main(seed=2020):
             eta[1], nl_eta[1] = res.x,res.fun
         # joint optimize
         if upthypr==3:
-            logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1])
+            logF=lambda q: logpost_eta(q,inf_GMC.model,m,V,[0,1])
             res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
             eta, nl_eta = res.x,res.fun
             nl_eta = (nl_eta,np.nan)

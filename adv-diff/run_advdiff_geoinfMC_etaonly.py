@@ -36,11 +36,11 @@ np.random.seed(seed)
 
 def main(seed=2020):
     parser = argparse.ArgumentParser()
-    parser.add_argument('algNO', nargs='?', type=int, default=2)
+    parser.add_argument('algNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
     parser.add_argument('thin', nargs='?', type=int, default=1)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.004,.004,None,None]) # [.001,.005,.005] simple likelihood model
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.003,.003,None,None]) # [.001,.005,.005] simple likelihood model
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
@@ -51,6 +51,7 @@ def main(seed=2020):
     meshsz = (61,61)
     eldeg = 1
     gamma = 2.; delta = 10.
+    # observation_times = np.arange(1., 4.+.5*.1, .1)
     rel_noise = .5
     nref = 1
     adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=True)
@@ -62,7 +63,7 @@ def main(seed=2020):
     a = 2.
     b = 1e-1
     m = [0,0]
-    V = np.asarray([1.,10.])
+    V = np.asarray([1.,1.])
     if upthypr:
         opts_unc={'gtol': 1e-6, 'disp': False, 'maxiter': 100}
     
@@ -72,19 +73,22 @@ def main(seed=2020):
     eta=spst.norm.rvs(m,np.sqrt(V));
     adif.misfit.stgp.update(C_x=adif.misfit.stgp.C_x.update(sigma2 = 1., l = np.exp(eta[0])),
                             C_t=adif.misfit.stgp.C_t.update(sigma2 = sigma2, l = np.exp(eta[1])))
+    # eta=np.log([adif.misfit.stgp.C_x.l,adif.misfit.stgp.C_t.l])
+    # adif.misfit.stgp.update(C_x=adif.misfit.stgp.C_x.update(sigma2 = 1.),
+    #                         C_t=adif.misfit.stgp.C_t.update(sigma2 = sigma2))
     dlta=adif.misfit.stgp.N/2;
     alpha = a+dlta;
     # unknown=adif.prior.gen_vector()
-    # unknown=adif.prior.sample(whiten=False)
-    MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
-    if os.path.isfile(MAP_file):
-        unknown=df.Function(adif.prior.V, name='MAP')
-        f=df.XDMFFile(adif.mpi_comm,MAP_file)
-        f.read_checkpoint(unknown,'m',0)
-        f.close()
-        unknown = unknown.vector()
-    else:
-        unknown=adif.get_MAP(SAVE=True)
+    unknown=adif.prior.sample(whiten=False)
+    # MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
+    # if os.path.isfile(MAP_file):
+    #     unknown=df.Function(adif.prior.V, name='MAP')
+    #     f=df.XDMFFile(adif.mpi_comm,MAP_file)
+    #     f.read_checkpoint(unknown,'m',0)
+    #     f.close()
+    #     unknown = unknown.vector()
+    # else:
+    #     unknown=adif.get_MAP(SAVE=True)
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for %d step(s)..."
@@ -93,7 +97,7 @@ def main(seed=2020):
     inf_GMC=geoinfMC(unknown,adif,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO])
     geom_ord=[0]
     if any(s in inf_GMC.alg_name for s in ['MALA','HMC']): geom_ord.append(1)
-    inf_GMC.geom=lambda parameter: geom_unknown(parameter, a=a,b=b,model=adif,geom_ord=geom_ord)
+    inf_GMC.geom=lambda parameter: geom_unknown(parameter, a=a,b=b,model=inf_GMC.model,geom_ord=geom_ord)
     # original sampling 
     # mc_fun=inf_GMC.sample
     # mc_args=(args.num_samp,args.num_burnin)
@@ -163,7 +167,7 @@ def main(seed=2020):
         # update eta
         logf=[]; nl_eta=np.zeros(2)
         # eta_x
-        logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0], a=a, b=b))
+        logf.append(lambda q: logpost_eta(q,inf_GMC.model,m[0],V[0],[0], a=a, b=b))
         if upthypr==1:
             eta[0], l_eta = slice_sampler(eta[0],logf[0](eta[0]),logf[0]);
             nl_eta[0] = -l_eta
@@ -171,7 +175,7 @@ def main(seed=2020):
             res=minimize(lambda q: -logf[0](q),eta[0],method='BFGS',options=opts_unc);
             eta[0], nl_eta[0] = res.x,res.fun
         # eta_t
-        logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1], a=a, b=b))
+        logf.append(lambda q: logpost_eta(q,inf_GMC.model,m[1],V[1],[1], a=a, b=b))
         if upthypr==1:
             eta[1], l_eta = slice_sampler(eta[1],logf[1](eta[1]),logf[1]);
             nl_eta[1] = -l_eta
@@ -180,7 +184,7 @@ def main(seed=2020):
             eta[1], nl_eta[1] = res.x,res.fun
         # joint optimize
         if upthypr==3:
-            logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1], a=a, b=b)
+            logF=lambda q: logpost_eta(q,inf_GMC.model,m,V,[0,1], a=a, b=b)
             res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
             eta, nl_eta = res.x,res.fun
             nl_eta = (nl_eta,np.nan)

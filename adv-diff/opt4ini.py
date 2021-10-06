@@ -13,14 +13,14 @@ import scipy.stats as spst
 STATE = 0; PARAMETER = 1
 from logpdf_hyperpars import *
         
-def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(2,dtype=bool), jtopt=True, Nmax=100, thld=1e-3):
+def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(3,dtype=bool), jtopt=True, Nmax=100, thld=1e-3):
     
     # constant updates
-    dlta=inf_GMC.model.misfit.stgp.I*inf_GMC.model.misfit.stgp.J/2;
+    dlta=inf_GMC.model.misfit.stgp.N/2;
     alpha = a+dlta;
     
     # initialization
-    objf=np.empty(2)*np.nan;
+    objf=np.empty(3)*np.nan;
     
     # optimization setting
     opts_unc={'gtol': 1e-6, 'disp': False, 'maxiter': 100}
@@ -34,6 +34,11 @@ def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(2,dtype=bool), jtopt=True,
         sigma2_=sigma2;
         eta_=copy.deepcopy(eta);
         objf_=copy.deepcopy(objf);
+        
+        # # update unknown parameter
+        # if opt_id[2]:
+        #     inf_GMC.model.x[PARAMETER]=inf_GMC.model.get_MAP()
+        #     objf[2]=inf_GMC.model._get_misfit(inf_GMC.model.x[PARAMETER])
         
         # update sigma2
         if opt_id[0]:
@@ -49,20 +54,24 @@ def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(2,dtype=bool), jtopt=True,
             if not jtopt:
                 logf=[]; nl_eta=np.zeros(2)
                 # eta_x
-                logf.append(lambda q: logpost_eta(q,inf_GMC,m[0],V[0],[0], a=a,b=b))
+                logf.append(lambda q: logpost_eta(q,inf_GMC.model,m[0],V[0],[0], a=a,b=b))
                 res=minimize(lambda q: -logf[0](q),eta[0],method='BFGS',options=opts_unc);
                 eta[0], nl_eta[0] = res.x,res.fun
                 # eta_t
-                logf.append(lambda q: logpost_eta(q,inf_GMC,m[1],V[1],[1], a=a,b=b))
+                logf.append(lambda q: logpost_eta(q,inf_GMC.model,m[1],V[1],[1], a=a,b=b))
                 res=minimize(lambda q: -logf[1](q),eta[1],method='BFGS',options=opts_unc);
                 eta[1], nl_eta[1] = res.x,res.fun
-                objf[1] = np.sum(nl_eta)
             else:
-                logF=lambda q: logpost_eta(q,inf_GMC,m,V,[0,1], a=a,b=b)
+                logF=lambda q: logpost_eta(q,inf_GMC.model,m,V,[0,1], a=a,b=b)
                 res=minimize(lambda q: -logF(q),eta,method='BFGS',options=opts_unc);
                 eta, nl_eta = res.x,res.fun
+            objf[1] = np.sum(nl_eta)
             inf_GMC.model.misfit.stgp.update(C_x=inf_GMC.model.misfit.stgp.C_x.update(l = np.exp(eta[0])),
                                              C_t=inf_GMC.model.misfit.stgp.C_t.update(l = np.exp(eta[1])))
+        # update unknown parameter
+        if opt_id[2]:
+            inf_GMC.model.x[PARAMETER]=inf_GMC.model.get_MAP()
+            objf[2]=inf_GMC.model._get_misfit(inf_GMC.model.x[PARAMETER])
         
         # display the progress
         if np.isin(iter,np.floor(Nmax*prog)):
@@ -72,8 +81,8 @@ def opt4ini(sigma2,eta,inf_GMC,a,b,m,V,opt_id=np.ones(2,dtype=bool), jtopt=True,
         # fprintf(['Objective function values: ',repmat('%.4f, ',1,length(objf)),'at iteration %d.\n'], objf, iter);
         # fprintf(['Objective function values: ',repmat('%.4f, ',1,length(objf)),'at iteration %d.\n'], objf, iter);
         print('sigma2_t:%.4f, eta_x=%.4f, eta_t=%.4f.\n' %(sigma2, eta[0], eta[1]))
-        print('Objective function (negative loglik) values: f_sigma2=%.4f, f_eta=%.4f at iteration %d.\n'
-              %(objf[0],objf[1],iter));        
+        print('Objective function (negative loglik) values: f_sigma2=%.4f, f_eta=%.4f, f_unknown=%.4f at iteration %d.\n'
+              %(objf[0],objf[1],objf[2],iter));        
         
         # break if condition satisfied
         if iter>1:

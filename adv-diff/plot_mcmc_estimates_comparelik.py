@@ -131,111 +131,116 @@ adif.prior.V=adif.prior.Vh
 algs=('pCN','infMALA','infHMC')#,'epCN','einfMALA','einfHMC','DREAMpCN','DREAMinfMALA','DREAMinfHMC','DRinfmHMC')
 alg_names=('pCN','$\infty$-MALA','$\infty$-HMC','e-pCN','e-$\infty$-MALA','e-$\infty$-HMC','DREAM-pCN','DREAM-$\infty$-MALA','DREAM-$\infty$-HMC','DR-$\infty$-HMC')
 num_algs=len(algs)
+lik_mdls=('simple','STlik')
+num_mdls=len(lik_mdls)
 # obtain estimates
 folder = './analysis_eldeg'+str(eldeg)
-mean_v=MultiVector(adif.prior.gen_vector(),num_algs)
-std_v=MultiVector(adif.prior.gen_vector(),num_algs)
-if os.path.exists(os.path.join(folder,'mcmc_mean.h5')) and os.path.exists(os.path.join(folder,'mcmc_std.h5')):
-    samp_f=df.Function(adif.prior.V,name="mv")
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_mean.h5'),"r") as f:
+mean_v=[MultiVector(adif.prior.gen_vector(),num_algs),MultiVector(adif.prior.gen_vector(),num_algs)]
+std_v=[MultiVector(adif.prior.gen_vector(),num_algs),MultiVector(adif.prior.gen_vector(),num_algs)]
+for m in range(num_mdls):
+    print('Processing '+lik_mdls[m]+' likelihood model...\n')
+    fld_m = folder+'/'+lik_mdls[m]
+    if os.path.exists(os.path.join(fld_m,'mcmc_mean_'+lik_mdls[m]+'.h5')) and os.path.exists(os.path.join(fld_m,'mcmc_std_'+lik_mdls[m]+'.h5')):
+        samp_f=df.Function(adif.prior.V,name="mv")
+        with df.HDF5File(adif.mpi_comm,os.path.join(fld_m,'mcmc_mean_'+lik_mdls[m]+'.h5'),"r") as f:
+            for i in range(num_algs):
+                f.read(samp_f,algs[i])
+                mean_v[m][i].set_local(samp_f.vector())
+        with df.HDF5File(adif.mpi_comm,os.path.join(fld_m,'mcmc_std_'+lik_mdls[m]+'.h5'),"r") as f:
+            for i in range(num_algs):
+                f.read(samp_f,algs[i])
+                std_v[m][i].set_local(samp_f.vector())
+    else:
+        # preparation for estimates
+        hdf5_files=[f for f in os.listdir(fld_m) if f.endswith('.h5')]
+        pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
+        num_samp=5000
+        prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
         for i in range(num_algs):
-            f.read(samp_f,algs[i])
-            mean_v[i].set_local(samp_f.vector())
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_std.h5'),"r") as f:
-        for i in range(num_algs):
-            f.read(samp_f,algs[i])
-            std_v[i].set_local(samp_f.vector())
-else:
-    # preparation for estimates
-    hdf5_files=[f for f in os.listdir(folder) if f.endswith('.h5')]
-    pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
-    num_samp=5000
-    prog=np.ceil(num_samp*(.1+np.arange(0,1,.1)))
-    for i in range(num_algs):
-        print('Getting estimates for '+algs[i]+' algorithm...')
-        # obtain weights
-        wts=np.ones(num_samp)/num_samp
-        if 'DREAM' in algs[i]:
-            for f_i in pckl_files:
+            print('Getting estimates for '+algs[i]+' algorithm...')
+            # obtain weights
+            wts=np.ones(num_samp)/num_samp
+            if 'DREAM' in algs[i]:
+                for f_i in pckl_files:
+                    if '_'+algs[i]+'_' in f_i:
+                        try:
+                            f=open(os.path.join(fld_m,f_i),'rb')
+                            f_read=pickle.load(f)
+                            logwts=f_read[4]; logwts-=logwts.max()
+                            wts=np.exp(logwts); wts/=np.sum(wts)
+                            f.close()
+                            print(f_i+' has been read!')
+                        except:
+                            pass
+            bip=adif_latent if 'DREAM' in algs[i] else adif
+            # calculate posterior estimates
+            found=False
+            samp_f=df.Function(bip.prior.V,name="parameter")
+            samp_mean=adif.prior.gen_vector(); samp_mean.zero()
+            samp_std=adif.prior.gen_vector(); samp_std.zero()
+    #         num_read=0
+            for f_i in hdf5_files:
                 if '_'+algs[i]+'_' in f_i:
                     try:
-                        f=open(os.path.join(folder,f_i),'rb')
-                        f_read=pickle.load(f)
-                        logwts=f_read[4]; logwts-=logwts.max()
-                        wts=np.exp(logwts); wts/=np.sum(wts)
+                        f=df.HDF5File(bip.pde.mpi_comm,os.path.join(fld_m,f_i),"r")
+                        samp_mean.zero(); samp_std.zero(); num_read=0
+                        for s in range(num_samp):
+                            if s+1 in prog:
+                                print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
+                            f.read(samp_f,'sample_{0}'.format(s))
+                            u=samp_f.vector()
+                            if '_whitened_latent' in f_i: u=bip.prior.v2u(u)
+                            if 'DREAM' in algs[i]:
+                                if 'c' in AE:
+                                    u_latin=adif_latent.vec2img(u)
+                                    width=tuple(np.mod(i,2) for i in u_latin.shape)
+                                    u_latin=chop(u_latin,width)[None,:,:,None] if autoencoder.activations['latent'] is None else u_latin.flatten()[None,:]
+                                    u=adif.img2vec(pad(np.squeeze(autoencoder.decode(u_latin)),width),adif.prior.V if eldeg>1 else None)
+                                else:
+                                    u_latin=u.get_local()[None,:]
+                                    u_decoded=autoencoder.decode(u_latin).flatten()
+                                    u=adif.prior.gen_vector(u_decoded) if eldeg==1 else vinPn(u_decoded, adif.prior.V)
+    #                         else:
+    #                             u=u_
+                            if '_whitened_emulated' in f_i: u=adif.prior.v2u(u)
+                            samp_mean.axpy(wts[s],u)
+                            samp_std.axpy(wts[s],u*u)
+    #                         num_read+=1
                         f.close()
                         print(f_i+' has been read!')
+                        f_read=f_i
+                        found=True
                     except:
                         pass
-        bip=adif_latent if 'DREAM' in algs[i] else adif
-        # calculate posterior estimates
-        found=False
-        samp_f=df.Function(bip.prior.V,name="parameter")
-        samp_mean=adif.prior.gen_vector(); samp_mean.zero()
-        samp_std=adif.prior.gen_vector(); samp_std.zero()
-#         num_read=0
-        for f_i in hdf5_files:
-            if '_'+algs[i]+'_' in f_i:
-                try:
-                    f=df.HDF5File(bip.pde.mpi_comm,os.path.join(folder,f_i),"r")
-                    samp_mean.zero(); samp_std.zero(); num_read=0
-                    for s in range(num_samp):
-                        if s+1 in prog:
-                            print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
-                        f.read(samp_f,'sample_{0}'.format(s))
-                        u=samp_f.vector()
-                        if '_whitened_latent' in f_i: u=bip.prior.v2u(u)
-                        if 'DREAM' in algs[i]:
-                            if 'c' in AE:
-                                u_latin=adif_latent.vec2img(u)
-                                width=tuple(np.mod(i,2) for i in u_latin.shape)
-                                u_latin=chop(u_latin,width)[None,:,:,None] if autoencoder.activations['latent'] is None else u_latin.flatten()[None,:]
-                                u=adif.img2vec(pad(np.squeeze(autoencoder.decode(u_latin)),width),adif.prior.V if eldeg>1 else None)
-                            else:
-                                u_latin=u.get_local()[None,:]
-                                u_decoded=autoencoder.decode(u_latin).flatten()
-                                u=adif.prior.gen_vector(u_decoded) if eldeg==1 else vinPn(u_decoded, adif.prior.V)
-#                         else:
-#                             u=u_
-                        if '_whitened_emulated' in f_i: u=adif.prior.v2u(u)
-                        samp_mean.axpy(wts[s],u)
-                        samp_std.axpy(wts[s],u*u)
-#                         num_read+=1
-                    f.close()
-                    print(f_i+' has been read!')
-                    f_read=f_i
-                    found=True
-                except:
-                    pass
-        if found:
-#             samp_mean=samp_mean/num_read; samp_std=samp_std/num_read
-            mean_v[i].set_local(samp_mean)
-            std_v[i].set_local(np.sqrt((samp_std - samp_mean*samp_mean).get_local()))
-    # save
-    samp_f=df.Function(adif.prior.V,name="mv")
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_mean.h5'),"w") as f:
-        for i in range(num_algs):
-            samp_f.vector().set_local(mean_v[i])
-            f.write(samp_f,algs[i])
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder,'mcmc_std.h5'),"w") as f:
-        for i in range(num_algs):
-            samp_f.vector().set_local(std_v[i])
-            f.write(samp_f,algs[i])
+            if found:
+    #             samp_mean=samp_mean/num_read; samp_std=samp_std/num_read
+                mean_v[m][i].set_local(samp_mean)
+                std_v[m][i].set_local(np.sqrt((samp_std - samp_mean*samp_mean).get_local()))
+        # save
+        samp_f=df.Function(adif.prior.V,name="mv")
+        with df.HDF5File(adif.mpi_comm,os.path.join(fld_m,'mcmc_mean'+lik_mdls[m]+'.h5'),"w") as f:
+            for i in range(num_algs):
+                samp_f.vector().set_local(mean_v[m][i])
+                f.write(samp_f,algs[i])
+        with df.HDF5File(adif.mpi_comm,os.path.join(fld_m,'mcmc_std'+lik_mdls[m]+'.h5'),"w") as f:
+            for i in range(num_algs):
+                samp_f.vector().set_local(std_v[m][i])
+                f.write(samp_f,algs[i])
 
-# load data with simple likelihood model
-folder0 = '../../../BUQae/code/ad_diff/analysis_eldeg'+str(eldeg)
-mean_v0=MultiVector(adif.prior.gen_vector(),num_algs)
-std_v0=MultiVector(adif.prior.gen_vector(),num_algs)
-if os.path.exists(os.path.join(folder0,'mcmc_mean_.h5')) and os.path.exists(os.path.join(folder0,'mcmc_std_.h5')):
-    samp_f=df.Function(adif.prior.V,name="mv")
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder0,'mcmc_mean_.h5'),"r") as f:
-        for i in range(num_algs):
-            f.read(samp_f,algs[i])
-            mean_v0[i].set_local(samp_f.vector())
-    with df.HDF5File(adif.mpi_comm,os.path.join(folder0,'mcmc_std_.h5'),"r") as f:
-        for i in range(num_algs):
-            f.read(samp_f,algs[i])
-            std_v0[i].set_local(samp_f.vector())
+# # load data with simple likelihood model
+# folder0 = '../../../BUQae/code/ad_diff/analysis_eldeg'+str(eldeg)
+# mean_v0=MultiVector(adif.prior.gen_vector(),num_algs)
+# std_v0=MultiVector(adif.prior.gen_vector(),num_algs)
+# if os.path.exists(os.path.join(folder0,'mcmc_mean_.h5')) and os.path.exists(os.path.join(folder0,'mcmc_std_.h5')):
+#     samp_f=df.Function(adif.prior.V,name="mv")
+#     with df.HDF5File(adif.mpi_comm,os.path.join(folder0,'mcmc_mean_.h5'),"r") as f:
+#         for i in range(num_algs):
+#             f.read(samp_f,algs[i])
+#             mean_v0[i].set_local(samp_f.vector())
+#     with df.HDF5File(adif.mpi_comm,os.path.join(folder0,'mcmc_std_.h5'),"r") as f:
+#         for i in range(num_algs):
+#             f.read(samp_f,algs[i])
+#             std_v0[i].set_local(samp_f.vector())
 
 # plot
 # num_algs-=1
@@ -259,7 +264,8 @@ for i,ax in enumerate(axes.flat):
 #         except:
 #             pass
 #     elif 1<=i<=num_algs:
-    sub_figs[i]=df.plot(vec2fun(mean_v0[i] if i<axes.shape[1] else mean_v[i%axes.shape[1]],adif.prior.V))
+    # sub_figs[i]=df.plot(vec2fun(mean_v0[i] if i<axes.shape[1] else mean_v[i%axes.shape[1]],adif.prior.V))
+    sub_figs[i]=df.plot(vec2fun(mean_v[0][i] if i<axes.shape[1] else mean_v[1][i%axes.shape[1]],adif.prior.V))
     ax.set_title(alg_names[i%axes.shape[1]])
     ax.set_aspect('auto')
     plt.axis([0, 1, 0, 1])
@@ -279,7 +285,8 @@ fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((2*num_algs)/num_row
 sub_figs = [None]*len(axes.flat)
 for i,ax in enumerate(axes.flat):
     plt.axes(ax)
-    sub_figs[i]=df.plot(vec2fun(std_v0[i] if i<axes.shape[1] else std_v[i%axes.shape[1]],adif.prior.V))
+    # sub_figs[i]=df.plot(vec2fun(std_v0[i] if i<axes.shape[1] else std_v[i%axes.shape[1]],adif.prior.V))
+    sub_figs[i]=df.plot(vec2fun(std_v[0][i] if i<axes.shape[1] else std_v[1][i%axes.shape[1]],adif.prior.V))
     ax.set_title(alg_names[i%axes.shape[1]])
     ax.set_aspect('auto')
     plt.axis([0, 1, 0, 1])
