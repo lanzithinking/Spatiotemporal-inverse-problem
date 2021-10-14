@@ -576,7 +576,7 @@ if __name__ == '__main__':
     # observation_times = np.arange(1., 4.+.5*.1, .1)
     rel_noise = .5
     nref = 1
-    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=True)
     # test
     adif.test(1e-8)
     # obtain MAP
