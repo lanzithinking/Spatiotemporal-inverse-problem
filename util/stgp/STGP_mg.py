@@ -53,8 +53,11 @@ class STGP_mg(STGP_isub,STGP,GP):
                  beta=1/K
         """
         if type(stgp) is STGP:
-            stgp=(stgp.C_x,stgp.C_t,stgp.Lambda) # STGP kernel
-        STGP.__init__(self,spat=stgp[0],temp=stgp[1],Lambda=stgp[2],store_eig=False,**kwargs) # STGP
+            stgp_args=stgp.__dict__
+            stgp=(stgp_args['C_x'],stgp_args['C_t'],stgp_args.pop('Lambda')) # STGP kernel
+        else:
+            stgp_args={}
+        STGP.__init__(self,spat=stgp[0],temp=stgp[1],Lambda=stgp[2],**stgp_args) # STGP
         self.parameters=kwargs # all parameters of the kernel
         self.K=self.parameters.get('K',1) # number of trials
         self.nz_var=self.parameters.get('nz_var',1.0) # noise variance
@@ -188,12 +191,14 @@ class STGP_mg(STGP_isub,STGP,GP):
             logpdf,half_ldet=GP.matn0pdf(self,X=X,nu=nu) # GP
         return logpdf,half_ldet
     
-    def update(self,stgp=None,nz_var=None):
+    def update(self,stgp=None,nz_var=None,**kwargs):
         """
         Update the eigen-basis
         """
         if stgp is not None:
             self=STGP.update(self,C_x=stgp[0],C_t=stgp[1],Lambda=stgp[2]) # STGP
+        if len(kwargs)>0:
+            self=STGP.update(self,**kwargs)
         if nz_var is not None and self.opt==1:
             nz_var_=self.nz_var
             self.nz_var=nz_var

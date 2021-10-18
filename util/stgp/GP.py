@@ -87,9 +87,9 @@ class GP:
         Powered exponential kernel: C(x,y)=sigma2*exp(-.5*(||x-y||/l)^s)
         """
         if len(args)==1:
-            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,self.s)/self.l,self.s)))+(1.+self.jit)*sps.eye(self.N)
+            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)))+(1.+self.jit)*sps.eye(self.N)
         elif len(args)==2:
-            C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,self.s)/self.l,self.s))
+            C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,p=self.s)/self.l,self.s))
         else:
             print('Wrong number of inputs!')
             raise
@@ -101,10 +101,10 @@ class GP:
         Matern class kernel: C(x,y)=2^(1-nu)/Gamma(nu)*(sqrt(2*nu)*(||x-y||/l)^s)^nu*K_nu(sqrt(2*nu)*(||x-y||/l)^s)
         """
         if len(args)==1:
-            scal_dist=np.sqrt(2.*self.nu)*pow(spsd.pdist(args[0],self.dist_f,self.s)/self.l,self.s)
+            scal_dist=np.sqrt(2.*self.nu)*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)
             C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*spsd.squareform(pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist))+(1.+self.jit)*sps.eye(self.N)
         elif len(args)==2:
-            scal_dist=np.sqrt(2*self.nu)*pow(spsd.cdist(args[0],args[1],self.dist_f,self.s)/self.l,self.s)
+            scal_dist=np.sqrt(2*self.nu)*pow(spsd.cdist(args[0],args[1],self.dist_f,p=self.s)/self.l,self.s)
             C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist)
             C[scal_dist==0]=1
         else:
@@ -189,7 +189,7 @@ class GP:
             tol=kwargs.pop('tol',1e-10)
             C_op=self.tomat() if not self.spdapx else spsla.LinearOperator((self.N,)*2,matvec=lambda v:self.mult(v,**kwargs))
             try:
-                eigv,eigf=spsla.eigsh(C_op,min(L,C_op.shape[0]-1),maxiter=maxiter,tol=tol)
+                eigv,eigf=spsla.eigsh(C_op,min(L,C_op.shape[0]),maxiter=maxiter,tol=tol)
             except Exception as divg:
                 print(*divg.args)
                 eigv,eigf=divg.eigenvalues,divg.eigenvectors
@@ -237,8 +237,8 @@ class GP:
                     cholC,lower=spla.cho_factor(self.tomat())
                     half_ldet=-X.shape[1]*np.sum(np.log(np.diag(cholC)))
                     quad=X*spla.cho_solve((cholC,lower),X)
-                except spla.LinAlgError:
-                    warnings.warn('Cholesky decomposition failed.')
+                except Exception as e:#spla.LinAlgError:
+                    warnings.warn('Cholesky decomposition failed: '+str(e))
                     chol=False
                     pass
             if not chol:

@@ -150,7 +150,7 @@ class STGP_isub(STGP):#,GP):
             else:
                 S_op=spsla.LinearOperator((self.D,)*2,matvec=lambda v:self._mult(v,delta=delta,**kwargs) if alpha>0 else self._solve(v,delta=delta,**kwargs))
             try:
-                eigv,eigf=spsla.eigsh(S_op,min(L,S_op.shape[0]-1),maxiter=maxiter,tol=tol)
+                eigv,eigf=spsla.eigsh(S_op,min(L,S_op.shape[0]),maxiter=maxiter,tol=tol)
             except Exception as divg:
                 print(*divg.args)
                 eigv,eigf=divg.eigenvalues,divg.eigenvectors

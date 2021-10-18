@@ -17,15 +17,16 @@ sys.path.append( "../" )
 from sampler.geoinfMC_dolfin import geoinfMC
 
 np.set_printoptions(precision=3, suppress=True)
-# seed=2020
-# np.random.seed(seed)
+seed=2020
+np.random.seed(seed)
 
 def main(seed=2020):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=2)
     parser.add_argument('num_samp', nargs='?', type=int, default=5000)
-    parser.add_argument('num_burnin', nargs='?', type=int, default=1000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.003,.003,None,None]) # [.001,.005,.005] simple likelihood model
+    parser.add_argument('num_burnin', nargs='?', type=int, default=2500)
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[.001,.007,.007,None,None]) # [.001,.005,.005] simple likelihood model
+    # parser.add_argument('step_sizes', nargs='?', type=float, default=[.0001,.0005,.0005,None,None]) # [.0002,.001,.001] simple likelihood model
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC'))
     args = parser.parse_args()
@@ -36,23 +37,24 @@ def main(seed=2020):
     eldeg = 1
     gamma = 2.; delta = 10.
     rel_noise = .5
+    # rel_noise = .2
     # observation_times = np.arange(1., 4.+.5*.1, .1)
     nref = 1
-    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=False)
+    adif = advdiff(mesh=meshsz, eldeg=eldeg, gamma=gamma, delta=delta, rel_noise=rel_noise, nref=nref, seed=seed, STlik=True) # set STlik=False for simple likelihood
     adif.prior.V=adif.prior.Vh
     
     # initialization
     # unknown=adif.prior.gen_vector()
     unknown=adif.prior.sample(whiten=False)
-#     MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
-#     if os.path.isfile(MAP_file):
-#         unknown=df.Function(adif.prior.V, name='MAP')
-#         f=df.XDMFFile(adif.mpi_comm,MAP_file)
-#         f.read_checkpoint(unknown,'m',0)
-#         f.close()
-#         unknown = unknown.vector()
-#     else:
-#         unknown=adif.get_MAP(SAVE=True)
+    # MAP_file=os.path.join(os.getcwd(),'properties/MAP.xdmf')
+    # if os.path.isfile(MAP_file):
+    #     unknown=df.Function(adif.prior.V, name='MAP')
+    #     f=df.XDMFFile(adif.mpi_comm,MAP_file)
+    #     f.read_checkpoint(unknown,'m',0)
+    #     f.close()
+    #     unknown = unknown.vector()
+    # else:
+    #     unknown=adif.get_MAP(SAVE=True)
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for %d step(s)..."
@@ -80,11 +82,11 @@ def main(seed=2020):
 #     print(pde_cnt)
 
 if __name__ == '__main__':
-    # main()
+    main()
     # set random seed
-    seeds = [2020+i*10 for i in range(1,10)]
-    n_seed = len(seeds)
-    for i in range(n_seed):
-        print("Running for seed %d ...\n"% (seeds[i]))
-        np.random.seed(seeds[i])
-        main(seed=seeds[i])
+    # seeds = [2020+i*10 for i in range(1,10)]
+    # n_seed = len(seeds)
+    # for i in range(n_seed):
+    #     print("Running for seed %d ...\n"% (seeds[i]))
+    #     np.random.seed(seeds[i])
+    #     main(seed=seeds[i])
