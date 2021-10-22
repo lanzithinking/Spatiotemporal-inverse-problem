@@ -78,16 +78,14 @@ class SpaceTimePointwiseStateObservation(Misfit):
             if self.stgp is None:
                 # define STGP kernel for the likelihood (misfit)
                 # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-                C_x=GP(self.targets, l=.5, jit=1e-2, sigma2=.1, store_eig=True)
+                C_x=GP(self.targets, l=.5, sigma2=.1, store_eig=True, jit=1e-2)
                 C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1)#, ker_opt='matern',nu=.5)
                 # C_x=GP(self.targets, l=.4, jit=1e-3, sigma2=.1, store_eig=True)
                 # C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1, ker_opt='matern',nu=.5)
-                # C_x=GP(self.targets, l=1., jit=1e-2, sigma2=np.sqrt(self.noise_variance), store_eig=True)
-                # C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=np.sqrt(self.noise_variance))#, ker_opt='matern',nu=.5)
                 self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
                 # C_x=GP(self.targets, l=.5, sigma2=.1, store_eig=True)
-                # C_t=GP(self.observation_times, store_eig=True, l=.1, sigma2=.1)#, ker_opt='matern',nu=.5)
-                # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False), K=1, nz_var=self.noise_variance)
+                # C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=1.)#, ker_opt='matern',nu=.5)
+                # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.noise_variance, store_eig=True)
         
     def prep_container(self, Vh=None):
         """
@@ -152,26 +150,32 @@ class SpaceTimePointwiseStateObservation(Misfit):
             self.noise_variance = noise_std_dev*noise_std_dev
             
             # save
-            obs = []
-            for t in self.observation_times:
-                self.d.retrieve(self.d_snapshot, t)
-                obs.append(self.d_snapshot.get_local())
-            obs = np.stack(obs)
-            f=open(os.path.join(fld,'AdvDiff_obs.pckl'),'wb')
-            pickle.dump([obs,self.noise_variance],f)
-            f.close()
+            if kwargs.pop('save_obs',True):
+                obs = []
+                for t in self.observation_times:
+                    self.d.retrieve(self.d_snapshot, t)
+                    obs.append(self.d_snapshot.get_local())
+                obs = np.stack(obs)
+                f=open(os.path.join(fld,'AdvDiff_obs.pckl'),'wb')
+                pickle.dump([obs,self.noise_variance],f)
+                f.close()
         return self.d.copy()
     
-    def observe(self, x, obs):
+    def observe(self, x, obs=None):
         """
         Observation operator
         """
-        obs.zero()
+        if obs is None:
+            obs = []
+        else:
+            obs.zero()
         
         for t in self.observation_times:
             x[STATE].retrieve(self.u_snapshot, t)
             self.B.mult(self.u_snapshot, self.Bu_snapshot)
-            obs.store(self.Bu_snapshot, t)
+            obs.store(self.Bu_snapshot, t) if type(obs) is TimeDependentVector else obs.append(self.Bu_snapshot.get_local())
+        
+        if type(obs) is list: return np.stack(obs)
             
     def cost(self, x, option='nll'):
         """
@@ -293,7 +297,7 @@ class SpaceTimePointwiseStateObservation(Misfit):
         for i in range(n):
             plt.axes(axes.flat[i])
             dl.plot(self.Vh.mesh())
-            sub_figs[i]=plt.scatter(self.targets[:,0],self.targets[:,1], c=self.d.data[np.where(np.isclose(self.d.times,times[i]))[0][0]], zorder=2)
+            sub_figs[i]=plt.scatter(self.targets[:,0],self.targets[:,1], s=12, c=self.d.data[np.where(np.isclose(self.d.times,times[i]))[0][0]], zorder=2)
 #             plt.xlim(0,1); plt.ylim(0,1)
 #             plt.gca().set_aspect('equal', 'box')
             plt.title('Time: {:.1f} s'.format(times[i],))
@@ -331,10 +335,11 @@ if __name__ == '__main__':
 #     misfit.d.zero()
 #     misfit.d.axpy(1.,rf_obs)
     # plot observations
-    # plt_times=[1.,2.,3.,4.]
-    # fig = misfit.plot_data(plt_times, (10,9))
-    # plt.subplots_adjust(wspace=0.1, hspace=0.2)
-    # plt.savefig(os.path.join(os.getcwd(),'properties/obs.png'),bbox_inches='tight')
+    plt.rcParams['image.cmap'] = 'jet'
+    plt_times=[1.,2.,3.,4.]
+    fig = misfit.plot_data(plt_times, (9,8))
+    plt.subplots_adjust(wspace=-0.1, hspace=0.2)
+    plt.savefig(os.path.join(os.getcwd(),'properties/obs.png'),bbox_inches='tight')
     
     # test gradient
     prior = BiLaplacian(Vh=pde.Vh[PARAMETER], gamma=1., delta=8.)

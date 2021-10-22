@@ -214,8 +214,8 @@ class GP:
             y=self.solve(x,**kwargs)
         else:
             eigv,eigf=self.eigs(**kwargs)
-            if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
-            y=multf(eigf*pow(eigv,alpha),multf(eigf.T,x,transp),transp)
+            # if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
+            y=multf(eigf*pow((alpha<0)*self.jit+eigv,alpha),multf(eigf.T,x,transp),transp)
         return y
     
     def logdet(self):
@@ -245,7 +245,7 @@ class GP:
                 half_ldet=-X.shape[1]*self.logdet()/2
                 quad=X*self.solve(X)
         else:
-            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)); rteigv[rteigv<self.jit**2]+=self.jit**2
+            eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit**2]+=self.jit**2
             half_ldet=-X.shape[1]*np.sum(np.log(rteigv))
             half_quad=eigf.T.dot(X)/rteigv[:,None]
             quad=half_quad**2

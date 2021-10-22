@@ -104,10 +104,9 @@ class STGP(GP):
             C_xt=np.kron(self.C_t.tomat(),self.C_x.tomat()) # (IJ,IJ)
             if 'z' in out: C_z=C_xt+beta*sps.eye(self.N) # (IJ,IJ)
         else:
-            Lambda_=self.Lambda**self.opt;
-            if alpha<0: Lambda_[Lambda_<self.jit**2]+=self.jit**2
-            Lambda_=pow(Lambda_,alpha);
-            _,Phi_x=self.C_x.eigs(self.L)
+            # Lambda_=self.Lambda**self.opt;
+            # if alpha<0: Lambda_[Lambda_<self.jit]+=self.jit
+            Lambda_=pow(self.Lambda**self.opt+(alpha<0)*self.jit,alpha); _,Phi_x=self.C_x.eigs(self.L)
             if self.ker_opt=='kron_prod':
                 PhiLambda=np.reshape(Phi_x[:,None,:]*Lambda_[None,:,:],(self.N,-1),order='F') # (IJ,L)
                 C_xt=PhiLambda.dot(PhiLambda.T) # (IJ,IJ)
@@ -159,10 +158,9 @@ class STGP(GP):
                 C_xtv=self.C_t.mult(self.C_x.mult(v),transp=True) # (I,J,K_)
                 if 'z' in out: C_zv=C_xtv+beta*v # (I,J,K_)
             else:
-                Lambda_=self.Lambda**self.opt;
-                if alpha<0: Lambda_[Lambda_<self.jit**2]+=self.jit**2
-                Lambda_=pow(Lambda_,alpha);
-                _,Phi_x=self.C_x.eigs(self.L)
+                # Lambda_=self.Lambda**self.opt;
+                # if alpha<0: Lambda_[Lambda_<self.jit]+=self.jit
+                Lambda_=pow(self.Lambda**self.opt+(alpha<0)*self.jit,alpha); _,Phi_x=self.C_x.eigs(self.L)
 #                 Phiv=np.tensordot(Phi_x.T, v, 1) # (L,J,K_)
                 prun=kwargs.pop('prun',True) and self.comm and self.I>1e3 # control of parallel run
                 if prun:
@@ -311,7 +309,7 @@ class STGP(GP):
             #     half_ldet=-X.shape[1]*self.logdet()/2
             #     quad=X*self.solve(X)
             # else:
-                # eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)); rteigv[rteigv<self.jit**2]+=self.jit**2
+                # eigv,eigf=self.eigs(); rteigv=np.sqrt(abs(eigv)+self.jit)#; rteigv[rteigv<self.jit]+=self.jit
                 # half_ldet=-X.shape[1]*np.log(rteigv).sum()
                 # half_quad=eigf.T.dot(X)/rteigv[:,None]
                 # quad=half_quad**2
@@ -320,7 +318,7 @@ class STGP(GP):
             if X.shape[0]!=self.I:
                 X=X.reshape((self.I,self.J,-1),order='F')
             if np.ndim(X)<3: X=X[:,:,None]
-            Lambda_=abs(self.Lambda); Lambda_[Lambda_<self.jit**2]+=self.jit**2
+            Lambda_=abs(self.Lambda)+self.jit#; Lambda_[Lambda_<self.jit]+=self.jit
             half_ldet=-X.shape[2]*np.log(Lambda_).sum()
             _,Phi_x=self.C_x.eigs(self.L)
             half_quad=np.tensordot(Phi_x.T, X, 1)/Lambda_.T[:,:,None] # (L,J,K_)
