@@ -188,8 +188,8 @@ class STGP_isub(STGP):#,GP):
                     pass
             if not chol:
                 eigv,eigf=self._eigs(**kwargs)
-                if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
-                y=(eigf*pow(eigv,alpha)).dot(eigf.T.dot(x))
+                # if alpha<0: eigv[eigv<self.jit**2]+=self.jit**2
+                y=(eigf*pow((alpha<0)*self.jit+eigv,alpha)).dot(eigf.T.dot(x))
 #         if x.shape[0]!=self.D:
 #             x=x.reshape((self.D,-1),order='F')
 #         y=GP.act(self,x,alpha=alpha,**kwargs)
