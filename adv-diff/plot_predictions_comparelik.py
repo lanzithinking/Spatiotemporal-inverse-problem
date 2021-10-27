@@ -63,6 +63,10 @@ true_param = df.interpolate(ic_expr, adif.prior.V).vector()
 adif_pred.x[PARAMETER]=true_param; adif_pred.pde.solveFwd(adif_pred.x[STATE],adif_pred.x)
 true_trj=adif_pred.misfit.observe(adif_pred.x)
 
+# selective locations to aggregate difference in observations
+cond = np.logical_or([abs(x-.25)<.01 or abs(x-.6)<.01 for x in adif.misfit.targets[:,0]],[abs(y-.4)<.01 or abs(y-.85)<.01 for y in adif.misfit.targets[:,1]]) # or abs(y-.85)<.01
+slab_idx = np.where(cond)[0]
+
 # load data
 fld=os.getcwd()
 try:
@@ -157,8 +161,11 @@ num_mdls=len(lik_mdls)
 folder = './analysis_eldeg'+str(eldeg)
 pred_m=[np.zeros((num_algs,adif_pred.misfit.targets.shape[0],len(adif_pred.misfit.observation_times))),np.zeros((num_algs,adif_pred.misfit.targets.shape[0],len(adif_pred.misfit.observation_times)))]
 pred_std=[np.zeros((num_algs,adif_pred.misfit.targets.shape[0],len(adif_pred.misfit.observation_times))),np.zeros((num_algs,adif_pred.misfit.targets.shape[0],len(adif_pred.misfit.observation_times)))]
+err_m=[np.zeros((num_algs,len(adif_pred.misfit.observation_times))),np.zeros((num_algs,len(adif_pred.misfit.observation_times)))]
+err_std=[np.zeros((num_algs,len(adif_pred.misfit.observation_times))),np.zeros((num_algs,len(adif_pred.misfit.observation_times)))]
 if os.path.exists(os.path.join(folder,'predictions.npz')):
-    pred_m, pred_std=list(map(np.load(file=os.path.join(folder,'predictions.npz')).get,['pred_m','pred_std']))
+    loaded = np.load(file=os.path.join(folder,'predictions.npz'))
+    pred_m, pred_std, err_m, err_std=list(map(loaded.get,['pred_m','pred_std','err_m','err_std']))
     print('Prediction data loaded!')
 else:
     for m in range(num_mdls):
@@ -190,12 +197,13 @@ else:
             found=False
             samp_f=df.Function(bip.prior.V,name="parameter")
             fwdout_mean=0; fwdout_std=0
+            fwderr_mean=0; fwderr_std=0
     #         num_read=0
             for f_i in hdf5_files:
                 if '_'+algs[i]+'_' in f_i:
                     try:
                         f=df.HDF5File(bip.pde.mpi_comm,os.path.join(fld_m,f_i),"r")
-                        fwdout_mean=0; fwdout_std=0; num_read=0
+                        fwdout_mean=0; fwdout_std=0; fwderr_mean=0; fwderr_std=0; num_read=0
                         for s in range(num_samp):
                             if s+1 in prog:
                                 print('{0:.0f}% has been completed.'.format(np.float(s+1)/num_samp*100))
@@ -219,6 +227,9 @@ else:
                             pred=adif_pred.misfit.observe(adif_pred.x)
                             fwdout_mean+=wts[s]*pred
                             fwdout_std+=wts[s]*pred**2
+                            err=np.linalg.norm(pred[:,slab_idx]-true_trj[:,slab_idx],axis=1)
+                            fwderr_mean+=wts[s]*err
+                            fwderr_std+=wts[s]*err**2
     #                         num_read+=1
                         f.close()
                         print(f_i+' has been read!')
@@ -230,12 +241,16 @@ else:
     #             fwdout_mean=fwdout_mean/num_read; fwdout_std=fwdout_std/num_read
                 pred_m[m][i]=fwdout_mean.T
                 pred_std[m][i]=np.sqrt(fwdout_std - fwdout_mean**2).T
+                err_m[m][i]=fwderr_mean.T
+                err_std[m][i]=np.sqrt(fwderr_std - fwderr_mean**2).T
     # save
-    np.savez_compressed(file=os.path.join(folder,'predictions'), pred_m=pred_m, pred_std=pred_std)
+    np.savez_compressed(file=os.path.join(folder,'predictions'), pred_m=pred_m, pred_std=pred_std, err_m=err_m, err_std=err_std)
 
 # plot prediction
 # num_algs-=1
 plt.rcParams['image.cmap'] = 'jet'
+
+# all locations
 # num_rows=2
 # for k in range(adif.misfit.targets.shape[0]):
 #     fig,axes = plt.subplots(nrows=num_rows,ncols=np.int(np.ceil((2*num_algs)/num_rows)),sharex=True,sharey=True,figsize=(11,8))
@@ -257,31 +272,76 @@ plt.rcParams['image.cmap'] = 'jet'
 #     plt.savefig(folder+'/predictions/comparelik_k'+str(k)+'.png',bbox_inches='tight')
 #     # plt.show()
 
-num_rows=3
-fig,axes = plt.subplots(nrows=num_rows,ncols=num_algs,sharex=True,sharey=False,figsize=(11,10))
+# selective locations
+# num_rows=3
+# fig,axes = plt.subplots(nrows=num_rows,ncols=num_algs,sharex=True,sharey=False,figsize=(11,10))
+# locs=[16,26]
+# for i,ax in enumerate(axes.flat):
+#     m=i//num_algs
+#     if m<num_rows-1:
+#         j=i%num_algs; k=locs[m]
+#         ax.plot(adif_pred.misfit.observation_times,true_trj[:,k],color='red',linewidth=1.5)
+#         ax.scatter(adif.misfit.observation_times,obs[:,k])
+#         ax.plot(adif_pred.misfit.observation_times,pred_m[0][j][k],linestyle='--')
+#         ax.fill_between(adif_pred.misfit.observation_times,pred_m[0][j][k]-1.96*pred_std[0][j][k],pred_m[0][j][k]+1.96*pred_std[0][j][k],color='b',alpha=.1)
+#         ax.plot(adif_pred.misfit.observation_times,pred_m[1][j][k],linestyle='-.')
+#         ax.fill_between(adif_pred.misfit.observation_times,pred_m[1][j][k]-1.96*pred_std[1][j][k],pred_m[1][j][k]+1.96*pred_std[1][j][k],color='y',alpha=.1)
+#     else:
+#         ax.plot(adif_pred.misfit.observation_times,np.zeros(len(adif_pred.misfit.observation_times)),color='red',linewidth=1.5)
+#         ax.plot(adif_pred.misfit.observation_times,np.linalg.norm(pred_m[0][j]-true_trj.T,axis=0),linestyle='--')
+#         # ax.fill_between(adif_pred.misfit.observation_times,pred_m[0][j][k]-1.96*pred_std[0][j][k],pred_m[0][j][k]+1.96*pred_std[0][j][k],color='b',alpha=.1)
+#         ax.plot(adif_pred.misfit.observation_times,np.linalg.norm(pred_m[1][j]-true_trj.T,axis=0),linestyle='-.')
+#         # ax.fill_between(adif_pred.misfit.observation_times,pred_m[1][j][k]-1.96*pred_std[1][j][k],pred_m[1][j][k]+1.96*pred_std[1][j][k],color='g',alpha=.1)
+#     ax.set_title(alg_names[i%axes.shape[1]]+' (x=%.3f, y=%.3f)'% tuple(adif.misfit.targets[k]))
+#     ax.set_aspect('auto')
+#     # plt.axis([0, 1, 0, 1])
+# plt.subplots_adjust(wspace=0.2, hspace=0.2)
+# # save plot
+# # fig.tight_layout()
+# if not os.path.exists(folder+'/predictions'): os.makedirs(folder+'/predictions')
+# plt.savefig(folder+'/predictions_comparelik_0.png',bbox_inches='tight')
+# plt.show()
+
+# num_rows=2
+# fig,axes = plt.subplots(nrows=num_rows,ncols=2,sharex=False,sharey=False,figsize=(9,8))
+num_rows=1
+fig,axes = plt.subplots(nrows=num_rows,ncols=3,sharex=False,sharey=False,figsize=(14,4))
 locs=[16,26]
+j=2;
 for i,ax in enumerate(axes.flat):
-    m=i//num_algs
-    if m<num_rows-1:
-        j=i%num_algs; k=locs[m]
+    if i==0:
+        plt.axes(axes.flat[i])
+    #     df.plot(adif_pred.misfit.Vh.mesh())
+    #     ax.scatter(adif_pred.misfit.targets[slab_idx,0],adif_pred.misfit.targets[slab_idx,1])
+        cred_cover = np.mean(np.logical_and(pred_m[0][j]-1.96*pred_std[0][j] < true_trj.T, true_trj.T < pred_m[0][j]+1.96*pred_std[0][j]),axis=0)
+        ax.plot(adif_pred.misfit.observation_times,cred_cover,linestyle='--')
+        cred_cover = np.mean(np.logical_and(pred_m[1][j]-1.96*pred_std[1][j] < true_trj.T, true_trj.T < pred_m[1][j]+1.96*pred_std[1][j]),axis=0)
+        ax.plot(adif_pred.misfit.observation_times,cred_cover,linestyle='-.')
+        ax.set_xlabel('t')
+        ax.set_title('truth covering rate of credible bands')
+        plt.legend(['simple likelihood','spatiotemporal likelihood'],frameon=False)
+    # elif i==1:
+    #     ax.plot(adif_pred.misfit.observation_times,np.zeros(len(adif_pred.misfit.observation_times)),color='red',linewidth=1.5)
+    #     ax.plot(adif_pred.misfit.observation_times,err_m[0][j],linestyle='--')
+    #     ax.fill_between(adif_pred.misfit.observation_times,err_m[0][j]-1.96*err_std[0][j],err_m[0][j]+1.96*err_std[0][j],color='b',alpha=.1)
+    #     ax.plot(adif_pred.misfit.observation_times,err_m[1][j],linestyle='-.')
+    #     ax.fill_between(adif_pred.misfit.observation_times,err_m[1][j]-1.96*err_std[1][j],err_m[1][j]+1.96*err_std[1][j],color='y',alpha=.1)
+    else:
+        # m=i%2; k=locs[m]
+        k=locs[i-1]
         ax.plot(adif_pred.misfit.observation_times,true_trj[:,k],color='red',linewidth=1.5)
         ax.scatter(adif.misfit.observation_times,obs[:,k])
         ax.plot(adif_pred.misfit.observation_times,pred_m[0][j][k],linestyle='--')
         ax.fill_between(adif_pred.misfit.observation_times,pred_m[0][j][k]-1.96*pred_std[0][j][k],pred_m[0][j][k]+1.96*pred_std[0][j][k],color='b',alpha=.1)
         ax.plot(adif_pred.misfit.observation_times,pred_m[1][j][k],linestyle='-.')
-        ax.fill_between(adif_pred.misfit.observation_times,pred_m[1][j][k]-1.96*pred_std[1][j][k],pred_m[1][j][k]+1.96*pred_std[1][j][k],color='y',alpha=.1)
-    else:
-        ax.plot(adif_pred.misfit.observation_times,np.zeros(len(adif_pred.misfit.observation_times)),color='red',linewidth=1.5)
-        ax.plot(adif_pred.misfit.observation_times,np.linalg.norm(pred_m[0][j]-true_trj.T,axis=0),linestyle='--')
-        # ax.fill_between(adif_pred.misfit.observation_times,pred_m[0][j][k]-1.96*pred_std[0][j][k],pred_m[0][j][k]+1.96*pred_std[0][j][k],color='b',alpha=.1)
-        ax.plot(adif_pred.misfit.observation_times,np.linalg.norm(pred_m[1][j]-true_trj.T,axis=0),linestyle='-.')
-        # ax.fill_between(adif_pred.misfit.observation_times,pred_m[1][j][k]-1.96*pred_std[1][j][k],pred_m[1][j][k]+1.96*pred_std[1][j][k],color='g',alpha=.1)
-    ax.set_title(alg_names[i%axes.shape[1]]+' (x=%.3f, y=%.3f)'% tuple(adif.misfit.targets[k]))
+        ax.fill_between(adif_pred.misfit.observation_times,pred_m[1][j][k]-1.96*pred_std[1][j][k],pred_m[1][j][k]+1.96*pred_std[1][j][k],color='y',alpha=.2)
+        ax.set_xlabel('t')
+        ax.set_title('forward prediction (x=%.3f, y=%.3f)'% tuple(adif.misfit.targets[k]))
     ax.set_aspect('auto')
     # plt.axis([0, 1, 0, 1])
 plt.subplots_adjust(wspace=0.2, hspace=0.2)
 # save plot
 # fig.tight_layout()
 if not os.path.exists(folder+'/predictions'): os.makedirs(folder+'/predictions')
-plt.savefig(folder+'/predictions_comparelik_k'+str(k)+'.png',bbox_inches='tight')
+plt.savefig(folder+'/predictions_comparelik.png',bbox_inches='tight')
 # plt.show()
