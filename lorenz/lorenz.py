@@ -29,7 +29,7 @@ import os
 
 def solve_lorenz(x0=None, t=None, N=10, max_time=4.0, sigma=10.0, beta=8./3, rho=28.0):
     # Choose random starting points, uniformly distributed from -15 to 15
-    np.random.seed(1)
+    #np.random.seed(1)
     if x0 is None:
         x0 = -15 + 30 * np.random.random((N, 3))
     if t is None:
@@ -45,6 +45,7 @@ def solve_lorenz(x0=None, t=None, N=10, max_time=4.0, sigma=10.0, beta=8./3, rho
                       for x0i in x0])
 
     return t, x_t
+
 
 
 def lorenz_deriv(x_y_z, t0, sigma=10, beta=8/3, rho=28):
@@ -148,9 +149,7 @@ def MH_trace(logu, obs, observation_times, x0, misfit, TARGET_SIGMA=None, CHAIN_
     if TARGET_SIGMA is None:
         #step size
         TARGET_SIGMA = np.diag((.25,.25))
-
-    
-    
+   
     #beta, rho
     u_list = np.zeros((CHAIN_LEN,2))
 
@@ -192,9 +191,9 @@ if __name__ == '__main__':
         obs = np.hstack((obs,obs2,xy,yz,xz))
     
     logu = gene_prior()
-    #res = misfit(u, obs, observation_times[negini:], x0,augment=False)
+    #res = misfit(u, obs, observation_times[negini:], x0,augment=augment)
     u_sample,apratio = MH_trace(logu, obs, observation_times[negini:], x0, misfit, 
-                                TARGET_SIGMA= np.diag((.25,.25)), CHAIN_LEN=10, augment=False)
+                                TARGET_SIGMA= np.diag((.25,.25)), CHAIN_LEN=10, augment=augment)
     pos_u = np.mean(np.exp(u_sample[1000:]),axis=0)
     _,G_u = solve_lorenz(x0=x0, t=observation_times, sigma=10.0, beta=pos_u[0], rho=pos_u[1])
     
