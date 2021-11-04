@@ -78,8 +78,8 @@ class SpaceTimePointwiseStateObservation(Misfit):
             if self.stgp is None:
                 # define STGP kernel for the likelihood (misfit)
                 # self.stgp=STGP(spat=self.targets, temp=self.observation_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-                C_x=GP(self.targets, l=.5, sigma2=.1, store_eig=True, jit=1e-2)
-                C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1)#, ker_opt='matern',nu=.5)
+                C_x=GP(self.targets, l=.5, sigma2=np.sqrt(self.noise_variance), store_eig=True, jit=1e-2)
+                C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=np.sqrt(self.noise_variance))#, ker_opt='matern',nu=.5)
                 # C_x=GP(self.targets, l=.4, jit=1e-3, sigma2=.1, store_eig=True)
                 # C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=.1, ker_opt='matern',nu=.5)
                 self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
