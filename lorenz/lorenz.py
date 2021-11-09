@@ -25,7 +25,12 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 
 import sys
-import os
+#import os
+sys.path.append( "../" )
+from sampler.slice import slice as slice_sampler
+from util.stgp.GP import GP
+from util.stgp.STGP import STGP
+#from util.stgp.STGP_mg import STGP_mg
 
 def solve_lorenz(x0=None, t=None, N=10, max_time=4.0, sigma=10.0, beta=8./3, rho=28.0):
     # Choose random starting points, uniformly distributed from -15 to 15
@@ -47,12 +52,6 @@ def solve_lorenz(x0=None, t=None, N=10, max_time=4.0, sigma=10.0, beta=8./3, rho
     return t, x_t
 
 
-
-def lorenz_deriv(x_y_z, t0, sigma=10, beta=8/3, rho=28):
-    """Compute the time-derivative of a Lorenz system."""
-    x, y, z = x_y_z
-    return [sigma * (y - x), x * (rho - z) - y, x * y - beta * z]
-
 ## generate prior defined in CES
 def gene_prior():
     # for beta and r
@@ -63,139 +62,193 @@ def gene_prior():
     
     return u.squeeze()
 
-## likelihood
-def misfit(u, obs, observation_times, x0, noise_variance=.01, STlik = False, augment=True):
-    """
-    u: beta, rho with sigma fixed = 10, 2 dimensional (same as CES paper)
-    obs: observation by solving real ODE
-    observation_times: time interval
-    x0: initial values x,y,z
-    noise_variance: likelihood Y ~ N(G(u), noise_variance)
-    """
-    #of trial N * t * 3
-    _, G_u = solve_lorenz(x0=x0, t=observation_times, sigma=10.0, beta=np.exp(u[0]), rho=np.exp(u[1]))
+
+class lorenz:
+    def __init__(self, observation_times, x0, obs=None, augment = True, STlik=False, **kwargs):
+        """
+        Initialize the lorenz 63 problem by defining the ODE model, the prior model and the misfit (likelihood) model.
+        """
+        
+        self.obs=obs
+        self.observation_times = observation_times
+        self.x0 = x0
+        self.augment = augment
+        
+        if self.obs is None:
+            # solve with real beta & rho
+            self.obs = self.solve([np.log(8/3), np.log(28)])
+            
+        #calculate emperical Gamma, covariance matrix 
+        self.noise_variance = kwargs.pop('noise_variance', np.diag(np.cov(self.obs.T)) ) 
+        self.STlik = STlik
+        
+        if self.STlik:
+            C_x=GP(self.targets, l=.5, sigma2=np.sqrt(self.noise_variance), store_eig=True, jit=1e-2)
+            C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=np.sqrt(self.noise_variance))
+            self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
+    
+    def solve_lorenz(self, t=None, sigma=10.0, beta=8./3, rho=28.0):
+        """
+        forward evaluation to obtain G(u) = x,y,z
+        """
+        
+        if t is None:
+            t =self.observation_times
+            
+        def lorenz_deriv(x_y_z, t0, sigma=sigma, beta=beta, rho=rho):
+            """Compute the time-derivative of a Lorenz system."""
+            x, y, z = x_y_z
+            return [sigma * (y - x), x * (rho - z) - y, x * y - beta * z]
+        # Solve for the trajectories
+        
+        x_t = np.asarray([integrate.odeint(lorenz_deriv, x0i, t)
+                          for x0i in self.x0])
+    
+        return t, x_t  
+    
+    def solve(self, logu, t=None):
+        """
+        obtain du = G(u)-obs
+        """
+        #of trial N * t * 3
+        _, G_u = self.solve_lorenz(t, sigma=10.0, beta=np.exp(logu[0]), rho=np.exp(logu[1]))
    
-    timeaveG_u = G_u.mean(axis=1) # #of trial N * 3
-    if augment:
-        G_u2 = (G_u**2).mean(axis=1)
-        xy = (G_u[:,:,0]*G_u[:,:,1]).mean(axis=1, keepdims = True)
-        yz = (G_u[:,:,1]*G_u[:,:,2]).mean(axis=1, keepdims = True)
-        xz = (G_u[:,:,0]*G_u[:,:,2]).mean(axis=1, keepdims = True)
-        timeaveG_u = np.hstack((timeaveG_u,G_u2,xy,yz,xz))
-    if STlik:
-        du = timeaveG_u - obs       
-        logpdf,half_ldet = self.stgp.matn0pdf(du)
-        res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
-    else:
+        timeaveG_u = G_u.mean(axis=1) # #of trial N * 3
+        if self.augment:
+            G_u2 = (G_u**2).mean(axis=1)
+            xy = (G_u[:,:,0]*G_u[:,:,1]).mean(axis=1, keepdims = True)
+            yz = (G_u[:,:,1]*G_u[:,:,2]).mean(axis=1, keepdims = True)
+            xz = (G_u[:,:,0]*G_u[:,:,2]).mean(axis=1, keepdims = True)
+            timeaveG_u = np.hstack((timeaveG_u,G_u2,xy,yz,xz))
         
-        du = timeaveG_u - obs 
-        c = np.sum(du*du)
-        res = c/(2.*noise_variance)
+        return timeaveG_u
+    
+    def misfit(self, logu, option='nll'):
+        """
+        du: obs-G(u)
+        noise_variance: likelihood Y ~ N(G(u), noise_variance)
+        """
         
-    return res
-
-
-def target_draw(logu, sigma=np.diag((.25,.25))):
-    draw = lambda : np.random.multivariate_normal(mean=logu, cov=sigma, size=1)[0]
-    return draw()
-
-#here prior and transition with same multivariate gaussian 
-def pdf_calc(logu, mean=np.array([1.2, 3.3]), cov=np.diag((.5**2,.15**2))):
-    return stats.multivariate_normal.pdf(logu, mean=mean , cov=cov)
-
-
-
-def sample(logu, misfit, obs, observation_times, x0, TARGET_SIGMA=None, augment=True):
-    
-    #here u is in log scale
-    #metropolis hasting
-    
-    if TARGET_SIGMA is None:
-        TARGET_SIGMA = np.diag((.25,.25))
-    u_init = logu
-    u_prop = target_draw(u_init, TARGET_SIGMA)
-    #################### for check the proposed candidate, comment this if no bug
-    print(u_prop)
-    prior_init = pdf_calc(u_init, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
-    prior_prop = pdf_calc(u_prop, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
-    
-    like_init = misfit(logu, obs, observation_times, x0, augment=augment)
-    like_prop = misfit(u_prop, obs, observation_times, x0, augment=augment)
-    
-    #we use gaussian symmetric, so get rid of this
-    #target_init = pdf_calc(u_prop, u_init, TARGET_SIGMA)
-    #target_prop = pdf_calc(u_init, u_prop, TARGET_SIGMA)
-
-    log_accept_prob = (prior_prop + like_prop) - \
-                    (prior_init + like_init)
-
-    random = np.random.uniform(low=0, high=1)
-    log_random = np.log(random)
-    
-    if log_random < log_accept_prob:
-
-        u_init = u_prop
-        acpt = True
-    else:
-        acpt = False
-
-    return u_init, acpt
-
-
-    
-
-def MH_trace(logu, obs, observation_times, x0, misfit, TARGET_SIGMA=None, CHAIN_LEN=5000, augment=True):
-    # np.random.seed(0)
-    if TARGET_SIGMA is None:
-        #step size
-        TARGET_SIGMA = np.diag((.25,.25))
-   
-    #beta, rho
-    u_list = np.zeros((CHAIN_LEN,2))
-
-    count=0
-    for epoch in range(CHAIN_LEN):
+        timeaveG_u = self.solve(logu)
+        du = timeaveG_u - self.obs 
         
-        logu,acpt = sample(logu, misfit, obs, observation_times, x0, TARGET_SIGMA=TARGET_SIGMA, augment = augment)
+        if self.STlik:              
+            logpdf,half_ldet = self.stgp.matn0pdf(du)
+            res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
+        else:
+            
+            res = np.sum(du*du/(2.*self.noise_variance) )
+            
+        return res
+    
+    def pdf_calc(self, logu, mean=np.array([1.2, 3.3]), cov=np.diag((.5**2,.15**2))):
+        return stats.multivariate_normal.pdf(logu, mean=mean , cov=cov)
+
+    def get_pospdf(self, logbeta, logrho):
+        logu = [logbeta, logrho]
+        prior =  self.pdf_calc(logu, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
+        lik = self.misfit(logu)
         
-        u_list[epoch] = logu
-        count += acpt
-    print('Acceptance ratio is: {}'.format(count/CHAIN_LEN))
-
-    return u_list,count/CHAIN_LEN
-
-
-
+        return prior + lik
+    
+    def MH(self, logu, TARGET_SIGMA=None):
+    
+        #metropolis hasting
+        
+        if TARGET_SIGMA is None:
+            TARGET_SIGMA = np.diag((.25,.25))
+        u_init = logu
+        
+        u_prop = np.random.multivariate_normal(mean=u_init, cov=TARGET_SIGMA)
+        
+        prior_init = self.pdf_calc(u_init, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
+        prior_prop = self.pdf_calc(u_prop, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
+        
+        like_init = self.misfit(u_init)
+        like_prop = self.misfit(u_prop)
+        
+        #we use gaussian symmetric, so get rid of this
+        #target_init = pdf_calc(u_prop, u_init, TARGET_SIGMA)
+        #target_prop = pdf_calc(u_init, u_prop, TARGET_SIGMA)
+    
+        log_accept_prob = (prior_prop + like_prop) - \
+                        (prior_init + like_init)
+    
+        random = np.random.uniform(low=0, high=1)
+        log_random = np.log(random)
+        
+        if log_random < log_accept_prob:
+    
+            u_init = u_prop
+            acpt = True
+        else:
+            acpt = False
+    
+        return u_init, acpt
 
     
+    def pos_trace(self, logu, TARGET_SIGMA=None, CHAIN_LEN=5000, useslice=True):
+        # np.random.seed(0)
+        if TARGET_SIGMA is None:
+            #step size
+            TARGET_SIGMA = np.diag((.25,.25))
+       
+        #beta, rho
+        u_list = np.zeros((CHAIN_LEN,2))
+        count=0
+        for epoch in range(CHAIN_LEN):
+            
+            if useslice:
+                
+                logbeta,_ = slice_sampler(logu[0], self.get_pospdf(logu[0],logu[1]), logf= lambda u: self.get_pospdf(u,logu[1]))
+                logu = [logbeta,logu[1]]
+                ####################check
+                print(logu)
+                logrho,_ = slice_sampler(logu[1], self.get_pospdf(logu[0],logu[1]), logf= lambda u: self.get_pospdf(logu[0],u))
+                logu = [logu[0],logrho]
+                ####################check
+                print(logu)
+            else:
+                logu,acpt = self.MH(logu, TARGET_SIGMA=TARGET_SIGMA)
+                count += acpt
+            
+            u_list[epoch] = logu
+            
+        print('Acceptance ratio is: {}'.format(count/CHAIN_LEN))
+    
+        return u_list,count/CHAIN_LEN
+    
+        
+
+
 if __name__ == '__main__':
-    #np.random.seed()
+    np.random.seed(2021)
     d = 3
     # if change obs from (x,y,z) to (x,y,z,x**2,y**2,z**2,xy,yz,xz) CES paper
-    augment = False
+    augment = True
     N = 10 
     x0 = -15 + 30 * np.random.random((N, d))   
-    num = 360
+    time_resolution = 40
     negini = 0
     t_1 = 0
-    t_final = 4
-    observation_times = np.linspace(t_1, t_final, num = num)
-    #(x,y,z,x2,y2,z2,xy,yz,xz)
-    _,obs1 = solve_lorenz(x0=x0, t=observation_times, sigma=10.0, beta=8./3, rho=28.0)
-    obs = obs1[:,negini:,:].mean(axis=1) # #of trial N * 3
-    if augment:
-        obs2 = (obs1[:,negini:,:]**2).mean(axis=1)
-        xy = (obs1[:,negini:,0]*obs1[:,negini:,1]).mean(axis=1, keepdims = True)
-        yz = (obs1[:,negini:,1]*obs1[:,negini:,2]).mean(axis=1, keepdims = True)
-        xz = (obs1[:,negini:,0]*obs1[:,negini:,2]).mean(axis=1, keepdims = True)
-        obs = np.hstack((obs,obs2,xy,yz,xz))
+    t_final = 10
+    observation_times = np.linspace(t_1, t_final, num = time_resolution*t_final+1)
     
+    #construct lorenz problem
+    lorenz = lorenz(observation_times[negini:], x0, obs=None, augment = augment)
+    
+    #check for forward evaluation G(u)
+    #_,check = lorenz.solve_lorenz(beta=np.exp(np.log(8/3)),rho=np.exp(np.log(28))) 
+    #check for misfit
+    #lorenz.misfit(logu=logu)
     logu = gene_prior()
-    #res = misfit(u, obs, observation_times[negini:], x0,augment=augment)
-    u_sample,apratio = MH_trace(logu, obs, observation_times[negini:], x0, misfit, 
-                                TARGET_SIGMA= np.diag((.25,.25)), CHAIN_LEN=10, augment=augment)
-    pos_u = np.mean(np.exp(u_sample[1000:]),axis=0)
+    u_sample,actratio = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.01,.05)), CHAIN_LEN=20, useslice=False)
+    # if use slice, much faster converge to infinity < 10 iterations
+    #u_sample,_ = lorenz.pos_trace(logu, CHAIN_LEN=10, useslice=True)
+    
+    pos_u = np.median(np.exp(u_sample[:]),axis=0)
     _,G_u = solve_lorenz(x0=x0, t=observation_times, sigma=10.0, beta=pos_u[0], rho=pos_u[1])
+    timeaveG_u = G_u.mean(axis=1)
     
     from mpl_toolkits.mplot3d import Axes3D
     from matplotlib.colors import cnames
@@ -222,9 +275,9 @@ if __name__ == '__main__':
         ax.view_init(30)#azim=0
         plt.show()
         
-    plot(obs)
+    plot(G_u)
     
-    
+    #check posterior samples trace plot
     fig,axes = plt.subplots(nrows=1,ncols=2,sharex=False,sharey=True,figsize=(16,4))
     for i, ax in enumerate(axes.flat):
         plt.axes(ax)
@@ -232,4 +285,11 @@ if __name__ == '__main__':
         plt.plot(np.exp(u_sample[:,1]),'o')
         #plt.title('Average $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
     
+    #check trajectories
+    fig,axes = plt.subplots(nrows=3,ncols=1,sharex=True,sharey=False,figsize=(16,10))
+    for i, ax in enumerate(axes.flat):
+        plt.axes(ax)
+        plt.plot(observation_times[negini:][:], G_u[:,:,i].T)
+        plt.title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
+        
     
