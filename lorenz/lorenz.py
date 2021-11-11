@@ -32,13 +32,13 @@ from util.stgp.GP import GP
 from util.stgp.STGP import STGP
 #from util.stgp.STGP_mg import STGP_mg
 
-def solve_lorenz(x0=None, t=None, N=10, max_time=4.0, sigma=10.0, beta=8./3, rho=28.0):
+def solve_lorenz(x0=None, t=None, N=10, t0=0, max_time=4.0, sigma=10.0, beta=8./3, rho=28.0):
     # Choose random starting points, uniformly distributed from -15 to 15
     #np.random.seed(1)
     if x0 is None:
         x0 = -15 + 30 * np.random.random((N, 3))
     if t is None:
-        t = np.linspace(0, max_time, int(250*max_time))
+        t = np.linspace(t0, max_time, int(250*max_time))
         
     def lorenz_deriv(x_y_z, t0, sigma=sigma, beta=beta, rho=rho):
         """Compute the time-derivative of a Lorenz system."""
@@ -63,7 +63,7 @@ def gene_prior():
     return u.squeeze()
 
 
-class lorenz:
+class Lorenz:
     def __init__(self, observation_times, x0, obs=None, augment = True, STlik=False, **kwargs):
         """
         Initialize the lorenz 63 problem by defining the ODE model, the prior model and the misfit (likelihood) model.
@@ -79,7 +79,7 @@ class lorenz:
             self.obs = self.solve([np.log(8/3), np.log(28)])
             
         #calculate emperical Gamma, covariance matrix 
-        self.noise_variance = kwargs.pop('noise_variance', np.diag(np.cov(self.obs.T)) ) 
+        self.noise_variance = kwargs.pop('noise_variance', (np.cov(self.obs.T)) ) #np.diag
         self.STlik = STlik
         
         if self.STlik:
@@ -127,6 +127,7 @@ class lorenz:
         """
         du: obs-G(u)
         noise_variance: likelihood Y ~ N(G(u), noise_variance)
+        return: loglik
         """
         
         timeaveG_u = self.solve(logu)
@@ -136,13 +137,17 @@ class lorenz:
             logpdf,half_ldet = self.stgp.matn0pdf(du)
             res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
         else:
-            
-            res = np.sum(du*du/(2.*self.noise_variance) )
+            res = -np.sum(np.dot(du, np.linalg.inv(self.noise_variance))*du)
+            #-np.sum( np.dot(np.dot(du[i], np.linalg.inv(cov)), du[i] ) for i in range(du.shape[0]) )
+            #res = -np.sum(du*du/(2.*self.noise_variance) )
             
         return res
     
     def pdf_calc(self, logu, mean=np.array([1.2, 3.3]), cov=np.diag((.5**2,.15**2))):
-        return stats.multivariate_normal.pdf(logu, mean=mean , cov=cov)
+        """
+        logprior
+        """
+        return np.log(stats.multivariate_normal.pdf(logu, mean=mean , cov=cov) )
 
     def get_pospdf(self, logbeta, logrho):
         logu = [logbeta, logrho]
@@ -203,11 +208,11 @@ class lorenz:
                 logbeta,_ = slice_sampler(logu[0], self.get_pospdf(logu[0],logu[1]), logf= lambda u: self.get_pospdf(u,logu[1]))
                 logu = [logbeta,logu[1]]
                 ####################check
-                print(logu)
+                #print(logu)
                 logrho,_ = slice_sampler(logu[1], self.get_pospdf(logu[0],logu[1]), logf= lambda u: self.get_pospdf(logu[0],u))
                 logu = [logu[0],logrho]
                 ####################check
-                print(logu)
+                #print(logu)
             else:
                 logu,acpt = self.MH(logu, TARGET_SIGMA=TARGET_SIGMA)
                 count += acpt
@@ -224,27 +229,31 @@ class lorenz:
 if __name__ == '__main__':
     np.random.seed(2021)
     d = 3
-    # if change obs from (x,y,z) to (x,y,z,x**2,y**2,z**2,xy,yz,xz) CES paper
+    # if change obs from (x,y,z) to (x,y,z,x**2,y**2,z**2,xy,yz,xz) CES paper 9*9
+    # (g(u)-obs)cov^(-1)(g(u)-obs) 10*9
     augment = True
-    N = 10 
+    N = 10
     x0 = -15 + 30 * np.random.random((N, d))   
+    
     time_resolution = 40
     negini = 0
     t_1 = 0
-    t_final = 10
+    t_final = 20
     observation_times = np.linspace(t_1, t_final, num = time_resolution*t_final+1)
     
     #construct lorenz problem
-    lorenz = lorenz(observation_times[negini:], x0, obs=None, augment = augment)
+    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment)
     
     #check for forward evaluation G(u)
     #_,check = lorenz.solve_lorenz(beta=np.exp(np.log(8/3)),rho=np.exp(np.log(28))) 
     #check for misfit
     #lorenz.misfit(logu=logu)
     logu = gene_prior()
-    u_sample,actratio = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.01,.05)), CHAIN_LEN=20, useslice=False)
-    # if use slice, much faster converge to infinity < 10 iterations
-    #u_sample,_ = lorenz.pos_trace(logu, CHAIN_LEN=10, useslice=True)
+    
+    #we don't need acceptance ratio for slice
+    u_sample,_ = lorenz.pos_trace(logu, CHAIN_LEN=1000, useslice=True)
+    #u_sample,ar = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.005,.01)), CHAIN_LEN=1000, useslice=False)
+    
     
     pos_u = np.median(np.exp(u_sample[:]),axis=0)
     _,G_u = solve_lorenz(x0=x0, t=observation_times, sigma=10.0, beta=pos_u[0], rho=pos_u[1])
@@ -291,5 +300,8 @@ if __name__ == '__main__':
         plt.axes(ax)
         plt.plot(observation_times[negini:][:], G_u[:,:,i].T)
         plt.title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
+    #plt.savefig('trajectories.png',bbox_inches='tight')
+
         
+
     
