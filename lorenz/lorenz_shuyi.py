@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Created on Tue Nov 23 18:13:35 2021
+
+@author: apple
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 
 
 '''
@@ -67,23 +75,40 @@ class Lorenz:
     def __init__(self, observation_times, x0, obs=None, augment = True, STlik=False, **kwargs):
         """
         Initialize the lorenz 63 problem by defining the ODE model, the prior model and the misfit (likelihood) model.
+        y ~ MN(G(u),C), G(u) forward evaluation u refers to hyperpatater in lorenz(sigma, beta, rho), G(u)->x,y,z obs
+        
+        observation_times: time interval we choose to observe
+        x0: initial conditions for space location x,y,z
+        obs: observation number of trail*number of time*space dimension = n*t*3 for spatiotemporal case, 
+            n*3/n*9 for time averaged data when STlik=False
+        augment: whether change original 3(x,y,z)->9(x,y,z,x**2,y**2,z**2,xy,yz,xz)
+        STlik: whether for spatiotemporal covariance kernal
         """
         
         self.obs=obs
         self.observation_times = observation_times
         self.x0 = x0
         self.augment = augment
+        self.STlik = STlik
+        if self.STlik:
+            self.augment = False #must be false when using spatiotemporal likelihood
+            
         
         if self.obs is None:
             # solve with real beta & rho
-            self.obs = self.solve([np.log(8/3), np.log(28)])
-            
+            G_u, timeaveG_u = self.solve([np.log(8/3), np.log(28)])
+            #3*t*trails for STlik=T, consistent with Cx*Ct
+            self.obs = G_u.transpose((2,1,0)) if self.STlik else timeaveG_u
         #calculate emperical Gamma, covariance matrix 
-        self.noise_variance = kwargs.pop('noise_variance', (np.cov(self.obs.T)) ) #np.diag
-        self.STlik = STlik
+        if self.x0.shape[0] == 1 and not self.STlik:
+            raise Exception("Sorry, no emperical covariance matrix for only 1 trial")
+        self.noise_variance = kwargs.pop('noise_variance', np.cov(self.obs.T) if not self.STlik 
+                                         else np.var(self.obs)) #np.diag
+        
         
         if self.STlik:
-            C_x=GP(self.targets, l=.5, sigma2=np.sqrt(self.noise_variance), store_eig=True, jit=1e-2)
+             
+            C_x=GP(timeaveG_u, l=.5, sigma2=np.sqrt(self.noise_variance), store_eig=True, jit=1e-2)
             C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=np.sqrt(self.noise_variance))
             self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
     
@@ -110,10 +135,12 @@ class Lorenz:
         """
         obtain du = G(u)-obs
         """
+        
         #of trial N * t * 3
-        _, G_u = self.solve_lorenz(t, sigma=10.0, beta=np.exp(logu[0]), rho=np.exp(logu[1]))
-   
-        timeaveG_u = G_u.mean(axis=1) # #of trial N * 3
+        _, G_u = self.solve_lorenz(t, sigma=10.0, beta=np.exp(logu[0]), rho=np.exp(logu[1]))   
+        # N * 3, convert to 1 dimensional for GP(3,)
+        timeaveG_u = G_u.mean(axis=1).squeeze() if self.STlik else G_u.mean(axis=1)
+        
         if self.augment:
             G_u2 = (G_u**2).mean(axis=1)
             xy = (G_u[:,:,0]*G_u[:,:,1]).mean(axis=1, keepdims = True)
@@ -121,22 +148,24 @@ class Lorenz:
             xz = (G_u[:,:,0]*G_u[:,:,2]).mean(axis=1, keepdims = True)
             timeaveG_u = np.hstack((timeaveG_u,G_u2,xy,yz,xz))
         
-        return timeaveG_u
+        return G_u, timeaveG_u
     
-    def misfit(self, logu, option='nll'):
+    def misfit(self, logu, option='ll'):
         """
         du: obs-G(u)
         noise_variance: likelihood Y ~ N(G(u), noise_variance)
         return: loglik
         """
         
-        timeaveG_u = self.solve(logu)
-        du = timeaveG_u - self.obs 
+        G_u, timeaveG_u = self.solve(logu)
         
-        if self.STlik:              
+        if self.STlik:
+            G_u = G_u.transpose((2,1,0))
+            du = G_u - self.obs
             logpdf,half_ldet = self.stgp.matn0pdf(du)
-            res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
+            res = {'ll':logpdf, 'quad':-(logpdf - half_ldet), 'both':[logpdf,-(logpdf - half_ldet)]}[option]
         else:
+            du = timeaveG_u - self.obs 
             res = -np.sum(np.dot(du, np.linalg.inv(self.noise_variance))*du)
             #-np.sum( np.dot(np.dot(du[i], np.linalg.inv(cov)), du[i] ) for i in range(du.shape[0]) )
             #res = -np.sum(du*du/(2.*self.noise_variance) )
@@ -219,7 +248,8 @@ class Lorenz:
             
             u_list[epoch] = logu
             
-        print('Acceptance ratio is: {}'.format(count/CHAIN_LEN))
+        if not useslice:
+            print('Acceptance ratio is: {}'.format(count/CHAIN_LEN))
     
         return u_list,count/CHAIN_LEN
     
@@ -232,7 +262,7 @@ if __name__ == '__main__':
     # if change obs from (x,y,z) to (x,y,z,x**2,y**2,z**2,xy,yz,xz) CES paper 9*9
     # (g(u)-obs)cov^(-1)(g(u)-obs) 10*9
     augment = True
-    N = 10
+    N = 1
     x0 = -15 + 30 * np.random.random((N, d))   
     
     time_resolution = 40
@@ -242,7 +272,7 @@ if __name__ == '__main__':
     observation_times = np.linspace(t_1, t_final, num = time_resolution*t_final+1)
     
     #construct lorenz problem
-    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment)
+    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment, STlik=True)
     
     #check for forward evaluation G(u)
     #_,check = lorenz.solve_lorenz(beta=np.exp(np.log(8/3)),rho=np.exp(np.log(28))) 
@@ -251,8 +281,8 @@ if __name__ == '__main__':
     logu = gene_prior()
     
     #we don't need acceptance ratio for slice
-    u_sample,_ = lorenz.pos_trace(logu, CHAIN_LEN=1000, useslice=True)
-    #u_sample,ar = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.005,.01)), CHAIN_LEN=1000, useslice=False)
+    u_sampleslice,_ = lorenz.pos_trace(logu, CHAIN_LEN=1000, useslice=True)
+    u_samplemh,ar = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.005,.01)), CHAIN_LEN=1000, useslice=False)
     
     
     pos_u = np.median(np.exp(u_sample[:]),axis=0)
