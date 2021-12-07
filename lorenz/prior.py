@@ -20,9 +20,9 @@ import matplotlib.pyplot as plt
 
 class prior:
     """
-    Prior for Lorenz63 inverse problem.
+    Prior for (sigma, beta, rho) in Lorenz63 inverse problem.
     """
-    def __init__(self, mean=[1.2, 3.3], std=[0.5, 0.15]):
+    def __init__(self, mean=[1.8, 1.2, 3.3], std=[1.0, 0.5, 0.15]):
         self.mean = mean
         self.std = std
         self.d = self.mean.shape[1] if np.ndim(self.mean)>1 else len(self.mean)
@@ -43,12 +43,14 @@ class prior:
         g = dx/self.std
         return g
     
-    def sample(self, n=1):
+    def sample(self, n=1, add_mean=True):
         """
         Generate a prior sample
         """
         z = np.random.randn(n,self.d)
-        u = z * self.std + self.mean
+        u = z * self.std
+        if add_mean:
+            u += self.mean
         return u.squeeze()
     
     def logpdf(self, u, add_mean=True, grad=False):

@@ -9,23 +9,23 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 '''
 # import modules
 import numpy as np
-from scipy import integrate
+from scipy import integrate, interpolate
 import matplotlib.pyplot as plt
 
-class ode:
+class lrz63:
     def __init__(self, x0=None, t=None, sigma=10.0, beta=8./3, rho=28.0, **kwargs):
         """
         Lorenz63 ordinary differential equations
         dx_1/dt = sigma (x_2 - x_1)
-        dx_2/dt = rho x_1 - x_2 - x_1x_3
-        dx_3/dt = -beta x_3 + x_1x_2
+        dx_2/dt = x_1 (rho - x_3) - x_2
+        dx_3/dt = x_1x_2 - beta x_3
         """
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
@@ -42,14 +42,77 @@ class ode:
         self.sigma = sigma
         self.beta = beta
         self.rho =rho
+        
+        # count PDE solving times
+        self.soln_count = np.zeros(4)
+        # 0-3: number of solving (forward,adjoint,2ndforward,2ndadjoint) equations respectively
     
-    def _dx(self, x, t, sigma, beta, rho):
+    # def _dx(self, x, t, sigma, beta, rho):
+    def _dx(self, t, x, sigma, beta, rho):
         """
         Time derivative of Lorenz63 dynamics
         """
-        return [sigma * (x[1]-x[0]), x[0] * (rho - x[2]), x[0] * x[1] - beta * x[2]]
+        return [sigma * (x[1]-x[0]), x[0] * (rho - x[2]) - x[1], x[0] * x[1] - beta * x[2]]
     
-    def solve(self, params=None, t=None):
+    def solveFwd(self, params=None, t=None):
+        """
+        Solve the forward equation
+        """
+        if params is None:
+            params = (self.sigma, self.beta, self.rho)
+        elif type(params) is not tuple:
+            params = tuple(params)
+        if t is None:
+            t = self.t
+        # x_t = np.asarray([integrate.odeint(self._dx, x0i, t, args=params, tfirst=True) for x0i in self.x0]) # (num_traj, time_res, 3)
+        sol = [integrate.solve_ivp(self._dx, (min(t),max(t)), x0i, t_eval=t, args=params, dense_output=True,) for x0i in self.x0]
+        x_t = np.asarray([sol_i.y.T for sol_i in sol]) # (num_traj, time_res, 3)
+        cont_soln = [sol_i.sol for sol_i in sol]
+        self.soln_count[0] += 1
+        return x_t, cont_soln
+    
+    # def _dlmd(self, lmd, t, sigma, beta, rho, x_f, g_f):
+    def _dlmd(self, t, lmd, sigma, beta, rho, x_f, g_f):
+        """
+        Time derivative of adjoint equation
+        """
+        x = x_f(t)
+        g = g_f(t)
+        return [sigma * (lmd[1]-lmd[0]) - g[0], 
+                lmd[0]*(rho - x[2]) - lmd[1] - lmd[2]*x[0] - g[1], 
+                lmd[0]*x[1] + lmd[1]*x[0] - beta * lmd[2] - g[2]]
+    
+    def solveAdj(self, params=None, t=None, sol=None, msft=None, **kwargs):
+        """
+        Solve the adjoint equation
+        """
+        if params is None:
+            params = (self.sigma, self.beta, self.rho)
+        elif type(params) is not tuple:
+            params = tuple(params)
+        if t is None:
+            t = self.t
+        if sol is None:
+            sol = self.solveFwd(params, t)
+        if msft is None:
+            from misfit import misfit
+            msft = misfit(self, t)
+        cont_soln = kwargs.get('cont_soln')
+        if cont_soln is None:
+            g = msft.grad(sol)
+            lmd_t = np.asarray([integrate.odeint(self._dlmd, np.zeros(3), t, 
+                                                 args=params+(interpolate.interp1d(t, sol[i], axis=0, fill_value='extrapolate'), 
+                                                              lambda t_:interpolate.interp1d(t, g[i], axis=0, fill_value='extrapolate')(t_)/(len(t) if msft.avg_traj else 1)),
+                                                 tfirst=True)[::-1] for i in range(sol.shape[0])]) # (num_traj, time_res, 3)
+        else:
+            lmd_t = np.asarray([integrate.odeint(self._dlmd, np.zeros(3), t, 
+                                                 args=params+(cont_soln[i], 
+                                                              lambda t_:msft.grad(cont_soln[i](t_)[None,None,:]).squeeze()/(len(t) if msft.avg_traj else 1)),
+                                                 tfirst=True)[::-1] for i in range(sol.shape[0])]) # (num_traj, time_res, 3)
+        self.soln_count[1] += 1
+        return lmd_t
+    
+    def solve(self, params=None, t=None, opt='fwd', **kwargs):
         """
         Solve Lorenz63 dynamics
         """
@@ -57,9 +120,13 @@ class ode:
             params = (self.sigma, self.beta, self.rho)
         if t is None:
             t = self.t
-        x_t = np.asarray([integrate.odeint(self._dx, x0i, t, args=params)
-                      for x0i in self.x0])
-        return x_t
+        if opt == 'fwd':
+            out = self.solveFwd(params, t)[0] # (num_traj, time_res, 3)
+        elif opt == 'adj':
+            out = self.solveAdj(params, t, **kwargs)
+        else:
+            out = None
+        return out
     
     def plot_soln(self, x_t=None, **kwargs):
         """
@@ -102,17 +169,17 @@ if __name__ == '__main__':
     
     #### -- demonstration -- ####
     num_traj = 10
-    lrz = ode(num_traj=num_traj,max_time=5,time_res=1000)
-    x_t = lrz.solve()
+    ode = lrz63(num_traj=num_traj,max_time=5,time_res=1000)
+    x_t = ode.solve()
     fig = plt.figure(figsize=(12,5))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
-    lrz.plot_soln(ax=ax1,angle=10)
+    ode.plot_soln(ax=ax1,angle=10)
     for i in range(3):
         if i==0:
             ax2_i = fig.add_subplot(3,2,(i+1)*2)
         else:
             ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
-        ax2_i.plot(lrz.t, x_t[:,:,i].T)
+        ax2_i.plot(ode.t, x_t[:,:,i].T)
         # ax2_i.set_title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
         ax2_i.set_ylabel({0:'x',1:'y',2:'z'}[i], rotation='horizontal')
         if i==2:
@@ -122,10 +189,10 @@ if __name__ == '__main__':
     #### -- multiple short trajectories -- ####
     # define the Lorenz63 ODE
     num_traj = 5000
-    lrz_multrj = ode(num_traj=num_traj,max_time=5,time_res=10000)
+    ode_multrj = lrz63(num_traj=num_traj,max_time=5,time_res=10000)
     # generate n trajectories
-    xt_multrj = lrz_multrj.solve()
-    # lrz_multrj.plot_soln()
+    xt_multrj = ode_multrj.solve()
+    # ode_multrj.plot_soln()
     # plt.show()
     # average trajectory
     xt_multrj_avg = xt_multrj.mean(axis=1)
@@ -148,10 +215,10 @@ if __name__ == '__main__':
     #### -- one long trajectories -- ####
     # define the Lorenz63 ODE
     num_traj = 1
-    lrz_multrj = ode(num_traj=num_traj,max_time=5000,time_res=50000)
+    ode_multrj = lrz63(num_traj=num_traj,max_time=5000,time_res=50000)
     # generate n trajectories
-    xt_multrj = lrz_multrj.solve()
-    # lrz_multrj.plot_soln()
+    xt_multrj = ode_multrj.solve()
+    # ode_multrj.plot_soln()
     # plt.show()
     # average trajectory
     xt_multrj_avg = xt_multrj.mean(axis=1)
@@ -164,10 +231,10 @@ if __name__ == '__main__':
     #     plt.axes(ax)
     #     i=k//2; j=k%2
     #     if j==0:
-    #         plt.plot(lrz_multrj.t[:np.floor(len(lrz_multrj.t)*pcnt).astype(int)], xt_multrj[:,:np.floor(len(lrz_multrj.t)*pcnt).astype(int),i].T)
+    #         plt.plot(ode_multrj.t[:np.floor(len(ode_multrj.t)*pcnt).astype(int)], xt_multrj[:,:np.floor(len(ode_multrj.t)*pcnt).astype(int),i].T)
     #         plt.title('First '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
     #     elif j==1:
-    #         plt.plot(lrz_multrj.t[-np.floor(len(lrz_multrj.t)*pcnt).astype(int):], xt_multrj[:,-np.floor(len(lrz_multrj.t)*pcnt).astype(int):,i].T)
+    #         plt.plot(ode_multrj.t[-np.floor(len(ode_multrj.t)*pcnt).astype(int):], xt_multrj[:,-np.floor(len(ode_multrj.t)*pcnt).astype(int):,i].T)
     #         plt.title('Last '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
     # plt.show()
     xt = pd.DataFrame(xt_multrj.squeeze()[::10],columns=['x','y','z'])
