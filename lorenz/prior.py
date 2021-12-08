@@ -20,9 +20,12 @@ import matplotlib.pyplot as plt
 
 class prior:
     """
-    Prior for (sigma, beta, rho) in Lorenz63 inverse problem.
+    (Log-Normal) prior for parameters in Lorenz63 inverse problem.
     """
     def __init__(self, mean=[1.8, 1.2, 3.3], std=[1.0, 0.5, 0.15]):
+        """
+        mean and standard deviation for logarithms of (sigma, beta, rho)
+        """
         self.mean = mean
         self.std = std
         self.d = self.mean.shape[1] if np.ndim(self.mean)>1 else len(self.mean)
@@ -55,7 +58,7 @@ class prior:
     
     def logpdf(self, u, add_mean=True, grad=False):
         """
-        Compute the logarithm of prior density (and its gradient) of function u.
+        Compute the logarithm of prior density (and its gradient) of parameter u.
         """
         if add_mean:
             u -= self.mean

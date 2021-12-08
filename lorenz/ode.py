@@ -20,12 +20,17 @@ from scipy import integrate, interpolate
 import matplotlib.pyplot as plt
 
 class lrz63:
+    """
+    Lorenz63 ordinary differential equations
+    dx_1/dt = sigma (x_2 - x_1)
+    dx_2/dt = x_1 (rho - x_3) - x_2
+    dx_3/dt = x_1x_2 - beta x_3
+    """
     def __init__(self, x0=None, t=None, sigma=10.0, beta=8./3, rho=28.0, **kwargs):
         """
-        Lorenz63 ordinary differential equations
-        dx_1/dt = sigma (x_2 - x_1)
-        dx_2/dt = x_1 (rho - x_3) - x_2
-        dx_3/dt = x_1x_2 - beta x_3
+        x0: initial state
+        t: time points to solve the dynmics at
+        (sigma, beta, rho): parameters
         """
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
@@ -98,7 +103,7 @@ class lrz63:
             from misfit import misfit
             msft = misfit(self, t)
         cont_soln = kwargs.get('cont_soln')
-        if cont_soln is None:
+        if cont_soln is None or msft.STlik:
             g = msft.grad(sol)
             lmd_t = np.asarray([integrate.odeint(self._dlmd, np.zeros(3), t, 
                                                  args=params+(interpolate.interp1d(t, sol[i], axis=0, fill_value='extrapolate'), 

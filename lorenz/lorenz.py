@@ -190,6 +190,8 @@ class Lorenz:
         dloglikv = np.sum(grad*v)
         rdiff_gradv = np.abs(dloglikv_fd-dloglikv)/np.linalg.norm(v)
         print('Relative difference of gradients in a random direction between adjoint and finite difference: %.10f' % rdiff_gradv)
+        end = time.time()
+        print('Time used is %.4f' % (end-start))
     
 if __name__ == '__main__':
     # set up random seed
@@ -201,8 +203,8 @@ if __name__ == '__main__':
     t_final = 1100
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    avg_traj = 'aug'
-    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, seed=seed, STlik=False)
+    avg_traj = False
+    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, seed=seed, STlik=True)
     # test
     lrz.test(1e-4)
     # obtain MAP

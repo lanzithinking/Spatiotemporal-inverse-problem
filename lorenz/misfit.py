@@ -29,11 +29,24 @@ from util.stgp.GP import GP
 from util.stgp.STGP import STGP
 from util.stgp.STGP_mg import STGP_mg
 
+# set to warn only once for the same warnings
+import warnings
+warnings.simplefilter('once')
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 class misfit:
     """
     Misfit for Lorenz63 inverse problem.
     """
     def __init__(self, ode=None, obs_times=None, **kwargs):
+        """
+        ode: Lorenz63 object
+        obs_times: time points where observations are taken
+        true_params: true parameters of Lorenz63 for which observations are obtained
+        avg_traj: whether to average the solution trajectories - False (whole trajectories); True (average trajectories); 'aug' (augment averaged trajectories with 2nd order interactions)
+        STlik: whether to use spatiotemporal models; has to be used with 'avg_traj=False'
+        stgp: spatiotemporal GP kernel
+        """
         self.ode = lrz63(**kwargs) if ode is None else ode
         if obs_times is None:
             t_init = kwargs.pop('t_init',0.)
@@ -49,19 +62,24 @@ class misfit:
         
         self.STlik = kwargs.pop('STlik',False)
         if self.STlik:
-            assert not self.avg_traj, 'Spatiotemporal models not available for time-averaged trajectories!'
+            if self.avg_traj:
+                warnings.warn('Spatiotemporal models not available for time-averaged trajectories!')
+                self.avg_traj = False
             self.stgp = kwargs.get('stgp')
             if self.stgp is None:
                 # define STGP kernel for the likelihood (misfit)
-                # self.stgp=STGP(spat=obs_locs, temp=self.obs_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-                C_x=GP(self.obs.mean(axis=0), l=.5, sigma2=np.sqrt(self.nzvar), store_eig=True, jit=1e-2)
-                C_t=GP(self.obs_times, store_eig=True, l=.2, sigma2=np.sqrt(self.nzvar))#, ker_opt='matern',nu=.5)
-                # C_x=GP(self.obs.mean(axis=0), l=.4, jit=1e-3, sigma2=.1, store_eig=True)
-                # C_t=GP(self.obs_times, store_eig=True, l=.2, sigma2=.1, ker_opt='matern',nu=.5)
+                # -- model 0 -- separable STGP
+                # self.stgp=STGP(spat=self.obs.mean(axis=0).T, temp=self.obs_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
+                C_x=GP(self.obs.mean(axis=0).T, l=.5, sigma2=np.diag(np.sqrt(self.nzvar.mean(axis=0))), store_eig=True, jit=1e-2)
+                C_t=GP(self.obs_times, store_eig=True, l=.2, sigma2=np.sqrt(self.nzvar.mean(axis=0).sum()))#, ker_opt='matern',nu=.5)
+                # C_x=GP(self.obs.mean(axis=0).T, l=.4, jit=1e-2, sigma2=.1, store_eig=True)
+                # C_t=GP(self.obs_times, jit=1e-2, store_eig=True, l=.1, sigma2=.1, ker_opt='matern',nu=.5)
                 self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
-                # C_x=GP(self.obs.mean(axis=0), l=.5, sigma2=.1, store_eig=True)
+                # C_x=GP(self.obs.mean(axis=0).T, l=.5, sigma2=.1, store_eig=True)
                 # C_t=GP(self.obs_times, store_eig=True, l=.2, sigma2=1.)#, ker_opt='matern',nu=.5)
-                # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.nzvar, store_eig=True)
+                # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.nzvar.mean(axis=0).sum(), store_eig=True)
+                # -- model 1 -- full STGP
+                # self.stgp=GP(self.obs.mean(axis=0).flatten(), l=.5, store_eig=True, jit=1e-3)
     
     def get_obs(self, **kwargs):
         """
@@ -72,7 +90,7 @@ class misfit:
             f=open(os.path.join(fld,'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj.pckl'),'rb')
             obs, nzvar=pickle.load(f)
             f.close()
-            print('Observation file has been read!')
+            print('Observation file '+'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj.pckl'+' has been read!')
         except Exception as e:
             print(e)
             ode=kwargs.pop('ode',self.ode)
@@ -116,7 +134,7 @@ class misfit:
             sol = self.ode.solve(params=tuple(self.true_params.values()), t=self.obs_times)
         dif_obs = self.observe(sol=sol) - self.obs
         if self.STlik:
-            logpdf,half_ldet = self.stgp.matn0pdf(np.swapaxes(dif_obs,1,2))
+            logpdf,half_ldet = self.stgp.matn0pdf(np.swapaxes(dif_obs,0,2).reshape((np.prod(dif_obs.shape[1:]),-1),order='F'))
             res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
         else:
             dif2_obs = dif_obs**2
@@ -132,7 +150,7 @@ class misfit:
             sol = self.ode.solve(params=tuple(self.true_params.values()), t=self.obs_times)
         dif_obs = self.observe(sol=sol) - self.obs
         if self.STlik:
-            g = self.stgp.solve(dif_obs).reshape(dif_obs.shape, order='F') # (num_traj, time_res, 3)
+            g = self.stgp.solve(np.swapaxes(dif_obs,0,2).reshape((np.prod(dif_obs.shape[1:]),-1),order='F')).T.reshape((dif_obs.shape[0],dif_obs.shape[2],dif_obs.shape[1]),order='F').swapaxes(1,2) # (num_traj, time_res, 3)
         else:
             if np.ndim(dif_obs)==2:
                 T = len(self.obs_times)
@@ -158,14 +176,14 @@ class misfit:
 if __name__ == '__main__':
     np.random.seed(2021)
     # define misfit
-    num_traj=10; avg_traj='aug'
-    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, save_obs=False, STlik=False)
+    num_traj=1; avg_traj=False
+    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, save_obs=False, STlik=True)
     
     # test gradient
-    sol = mft.ode.solve(params=(10.0, 3.0, 28.0) ,t=mft.obs_times)
+    sol = mft.ode.solve(params=(10.0, 3.0, 28.0), t=mft.obs_times)
     c = mft.cost(sol)
     g = mft.grad(sol)
-    h = 1e-5
+    h = 1e-7
     dsol = np.random.randn(*sol.shape)
     c1 = mft.cost(sol +  h*dsol)
     gdsol_fd = (c1-c)/h
