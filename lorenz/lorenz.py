@@ -55,7 +55,8 @@ class Lorenz:
         seed = kwargs.pop('seed',2021)
         self.setup(seed,**kwargs)
         # initialize the joint state vector
-        self.x = [[],]*3
+        # self.x = [[],]*3
+        self.x = [self.x0[:,None,:], list(self.ode_params), []]
     
     def setup(self,seed=2021,**kwargs):
         """
@@ -77,15 +78,16 @@ class Lorenz:
 #         print(sep, 'Set the approximate posterior model.', sep)
 #         self.post_Ga = Gaussian_apx_posterior(self.prior, eigs='hold')
     
-    def _get_misfit(self, parameter=None, MF_only=True):
+    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False):
         """
         Compute the misfit for given parameter.
         """
         if parameter is None:
             parameter=self.prior.mean
         self.x[PARAMETER] = np.exp(parameter)
-        self.x[STATE] = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
-        msft = self.misfit.cost(self.x[STATE][0])
+        if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
+        self.x[STATE], self.cont_soln = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
+        msft = self.misfit.cost(self.x[STATE])
         if not MF_only: msft += self.prior.cost(parameter)
         return msft
     
@@ -96,9 +98,10 @@ class Lorenz:
         if parameter is None:
             parameter=self.prior.mean
         self.x[PARAMETER] = np.exp(parameter)
-        x = self.x[STATE][0]
-        self.x[ADJOINT] = self.ode.solveAdj(self.x[PARAMETER], self.misfit.obs_times, x, self.misfit, cont_soln=self.x[STATE][1])
-        grad = np.sum(self.x[ADJOINT]*np.stack([-(x[:,:,1]-x[:,:,0]), x[:,:,2], -x[:,:,0]], axis=-1), axis=(0,1))
+        x = self.x[STATE]
+        self.x[ADJOINT] = self.ode.solveAdj(self.x[PARAMETER], self.misfit.obs_times, x, self.misfit, cont_soln=self.cont_soln)
+        dt = np.diff(self.misfit.obs_times[:2])
+        grad = np.sum(self.x[ADJOINT]*np.stack([-(x[:,:,1]-x[:,:,0]), x[:,:,2], -x[:,:,0]], axis=-1), axis=(0,1)) *dt * self.x[PARAMETER] # exp transform
         if not MF_only: grad += self.prior.grad(parameter)
         return grad
 
@@ -120,7 +123,8 @@ class Lorenz:
         
         # get log-likelihood
         if any(s>=0 for s in geom_ord):
-            loglik = -self._get_misfit(parameter, **kwargs)
+            warm_start = kwargs.pop('warm_start',False)
+            loglik = -self._get_misfit(parameter, warm_start=warm_start, **kwargs)
         
         # get gradient
         if any(s>=1 for s in geom_ord):
@@ -165,13 +169,14 @@ class Lorenz:
         """
         # random sample parameter
         parameter = self.prior.sample(add_mean=False)
+        # parameter = np.log(list(self.misfit.true_params.values())) + .1*np.random.randn(3)
         
         # MF_only = True
         import time
         # obtain the geometric quantities
         print('\n\nObtaining geometric quantities with Adjoint method...')
         start = time.time()
-        loglik,grad,_,_ = self.get_geom(parameter,geom_ord=[0,1])
+        loglik,grad,_,_ = self.get_geom(parameter,geom_ord=[0,1],warm_start=False)
         end = time.time()
         print('Time used is %.4f' % (end-start))
         
@@ -183,11 +188,11 @@ class Lorenz:
         ## gradient
         print('\nChecking gradient:')
         parameter_p = parameter + h*v
-        loglik_p = -self._get_misfit(parameter_p)
+        loglik_p = -self._get_misfit(parameter_p,warm_start=False)
 #         parameter_m = parameter - h*v
 #         loglik_m = -self._get_misfit(parameter_m)
         dloglikv_fd = (loglik_p-loglik)/h
-        dloglikv = np.sum(grad*v)
+        dloglikv = grad.dot(v)
         rdiff_gradv = np.abs(dloglikv_fd-dloglikv)/np.linalg.norm(v)
         print('Relative difference of gradients in a random direction between adjoint and finite difference: %.10f' % rdiff_gradv)
         end = time.time()
@@ -206,7 +211,7 @@ if __name__ == '__main__':
     avg_traj = False
     lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, seed=seed, STlik=True)
     # test
-    lrz.test(1e-4)
+    lrz.test(1e-10)
     # obtain MAP
     # map_v = lrz.get_MAP(init='zero',SAVE=True)
     # # compare it with the truth

@@ -102,18 +102,23 @@ class lrz63:
         if msft is None:
             from misfit import misfit
             msft = misfit(self, t)
+        g = msft.grad(sol) # (num_traj, 3 or 9) for avg_traj; (num_traj, time_res, 3) for non-avg_traj
         cont_soln = kwargs.get('cont_soln')
-        if cont_soln is None or msft.STlik:
-            g = msft.grad(sol)
-            lmd_t = np.asarray([integrate.odeint(self._dlmd, np.zeros(3), t, 
-                                                 args=params+(interpolate.interp1d(t, sol[i], axis=0, fill_value='extrapolate'), 
-                                                              lambda t_:interpolate.interp1d(t, g[i], axis=0, fill_value='extrapolate')(t_)/(len(t) if msft.avg_traj else 1)),
-                                                 tfirst=True)[::-1] for i in range(sol.shape[0])]) # (num_traj, time_res, 3)
-        else:
-            lmd_t = np.asarray([integrate.odeint(self._dlmd, np.zeros(3), t, 
-                                                 args=params+(cont_soln[i], 
-                                                              lambda t_:msft.grad(cont_soln[i](t_)[None,None,:]).squeeze()/(len(t) if msft.avg_traj else 1)),
-                                                 tfirst=True)[::-1] for i in range(sol.shape[0])]) # (num_traj, time_res, 3)
+        lmd_t = []
+        for i in range(sol.shape[0]):
+            xf_i = cont_soln[i] if cont_soln is not None else interpolate.interp1d(t, sol[i], axis=0, fill_value='extrapolate')
+            if msft.STlik or np.ndim(g)==3:
+                gf_i = lambda t_: interpolate.interp1d(t, g[i], axis=0, fill_value='extrapolate')(t_)/(len(t) if msft.avg_traj else 1)
+            else:
+                def gf_i(t_):
+                    g_i = g[i,:3]
+                    if msft.avg_traj=='aug':
+                        x_it = xf_i(t_)
+                        g_i += g[i,3:6]*x_it*2
+                        g_i += (g[i,6:]*x_it[[1,0,2]])[[0,2,1]] + (g[i,6:]*x_it[[0,2,1]])[[1,0,2]]
+                    return g_i/len(t)
+            lmd_t.append(integrate.odeint(self._dlmd, np.zeros(3), t, args=params+(xf_i, gf_i), tfirst=True)[::-1])
+        lmd_t = np.array(lmd_t) # (num_traj, time_res, 3)
         self.soln_count[1] += 1
         return lmd_t
     

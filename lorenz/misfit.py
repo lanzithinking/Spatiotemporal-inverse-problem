@@ -142,7 +142,7 @@ class misfit:
             res = np.sum(dif2_obs/self.nzvar)/2
         return res
         
-    def grad(self, sol=None):
+    def grad(self, sol=None, wrt='obs_sol'):
         """
         Compute the gradient of misfit
         """
@@ -159,30 +159,36 @@ class misfit:
             elif np.ndim(dif_obs)==3:
                 T = 1
             d_obs = dif_obs/self.nzvar[:,None,:] # (num_traj, 1, 3 or 9)
-            # g = np.tile(d_obs[:,:,:3]/T,(1,T,1)) # (num_traj, time_res, 3)
-            g = np.tile(d_obs[:,:,:3]/T,(1,sol.shape[1],1)) # (num_traj, time_res, 3)
-            if self.avg_traj=='aug':
-                g += d_obs[:,:,3:6]*sol*2/T
-                sol3 = np.zeros(sol.shape+(3,))
-                sol3[:,:,0,0] = sol[:,:,1]
-                sol3[:,:,0,1] = sol[:,:,0]
-                sol3[:,:,1,0] = sol[:,:,2]
-                sol3[:,:,1,2] = sol[:,:,0]
-                sol3[:,:,2,1] = sol[:,:,2]
-                sol3[:,:,2,2] = sol[:,:,1]
-                g += np.sum(d_obs[:,:,6:][:,:,:,None]*sol3/T,axis=2)
+            if wrt=='obs_sol':
+                g = d_obs
+                if g.shape[1]==1: g=np.squeeze(g, axis=1)
+            elif wrt=='sol':
+                # g = np.tile(d_obs[:,:,:3]/T,(1,T,1)) # (num_traj, time_res, 3)
+                g = np.tile(d_obs[:,:,:3]/T,(1,sol.shape[1],1)) # (num_traj, time_res, 3)
+                if self.avg_traj=='aug':
+                    g += d_obs[:,:,3:6]*sol*2/T
+                    sol3 = np.zeros(sol.shape+(3,))
+                    sol3[:,:,0,0] = sol[:,:,1]
+                    sol3[:,:,0,1] = sol[:,:,0]
+                    sol3[:,:,1,0] = sol[:,:,2]
+                    sol3[:,:,1,2] = sol[:,:,0]
+                    sol3[:,:,2,1] = sol[:,:,2]
+                    sol3[:,:,2,2] = sol[:,:,1]
+                    g += np.sum(d_obs[:,:,6:][:,:,:,None]*sol3/T,axis=2)
+            else:
+                g = None
         return g
 
 if __name__ == '__main__':
     np.random.seed(2021)
     # define misfit
-    num_traj=1; avg_traj=False
-    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, save_obs=False, STlik=True)
+    num_traj=1; avg_traj='aug'
+    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, save_obs=False, STlik=False)
     
     # test gradient
     sol = mft.ode.solve(params=(10.0, 3.0, 28.0), t=mft.obs_times)
     c = mft.cost(sol)
-    g = mft.grad(sol)
+    g = mft.grad(sol, 'sol')
     h = 1e-7
     dsol = np.random.randn(*sol.shape)
     c1 = mft.cost(sol +  h*dsol)

@@ -77,7 +77,7 @@ class prior:
         if comp==0:
             return u_actedon
         else:
-            Cu = np.pow(self.std,comp*2)*u_actedon
+            Cu = np.power(self.std,comp*2)*u_actedon
             return Cu
 
 if __name__ == '__main__':
