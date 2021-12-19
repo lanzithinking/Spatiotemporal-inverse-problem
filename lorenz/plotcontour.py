@@ -39,8 +39,8 @@ if __name__ == '__main__':
     d = 3
     # if change obs from (x,y,z) to (x,y,z,x**2,y**2,z**2,xy,yz,xz) CES paper 9*9
     # (g(u)-obs)cov^(-1)(g(u)-obs) 10*9
-    augment = False
-    N = 1 #1 for STLik 10 for not
+    augment = True
+    N = 10 #1 for STLik 10 for not
     x0 = -15 + 30 * np.random.random((N, d))   
     
     time_resolution = 40
@@ -50,11 +50,17 @@ if __name__ == '__main__':
     observation_times = np.linspace(t_1, t_final, num = time_resolution*t_final+1)
     
     #construct lorenz problem
-    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment, STlik=True)
+    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment, STlik=False)
     
     misfit23 = contour_misfit(h1st=2.4,h1e=2.85, h2st=27.4, h2e=28.5, lorenz, drop=1, num=100, plot=True)
     misfit13 = contour_misfit(9.4, 10.5, 27.4, 28.5, lorenz, drop=2, num=20, plot=True)
     misfit12 = contour_misfit(9.4, 10.5, 2.4, 2.85, lorenz, drop=3, num=20, plot=True)
+    
+    augment = False
+    N = 1 #1 for STLik 10 for not
+    x0 = -15 + 30 * np.random.random((N, d))   
+    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment, STlik=True)
+    
     misfit23lik = contour_misfit(h1st=2.4,h1e=2.85, h2st=27.4, h2e=28.5, lorenz=lorenz, drop=1, num=20, plot=True)
     misfit13lik = contour_misfit(9.4, 10.5, 27.4, 28.5, lorenz, drop=2, num=20, plot=True)
     misfit12lik = contour_misfit(9.4, 10.5, 2.4, 2.85, lorenz, drop=3, num=20, plot=True)
