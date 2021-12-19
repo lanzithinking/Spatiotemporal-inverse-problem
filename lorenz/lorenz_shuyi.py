@@ -1,16 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-<<<<<<< HEAD
-=======
-"""
-Created on Tue Nov 23 18:13:35 2021
 
-@author: apple
-"""
 
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
 
 
 '''
@@ -78,36 +69,20 @@ class Lorenz:
     def __init__(self, observation_times, x0, obs=None, augment = True, STlik=False, **kwargs):
         """
         Initialize the lorenz 63 problem by defining the ODE model, the prior model and the misfit (likelihood) model.
-<<<<<<< HEAD
-=======
         y ~ MN(G(u),C), G(u) forward evaluation u refers to hyperpatater in lorenz(sigma, beta, rho), G(u)->x,y,z obs
         
         observation_times: time interval we choose to observe
-        x0: initial conditions for space location x,y,z
+        x0: initial conditions for space location x,y,z(n*3)
         obs: observation number of trail*number of time*space dimension = n*t*3 for spatiotemporal case, 
             n*3/n*9 for time averaged data when STlik=False
         augment: whether change original 3(x,y,z)->9(x,y,z,x**2,y**2,z**2,xy,yz,xz)
         STlik: whether for spatiotemporal covariance kernal
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
         """
         
         self.obs=obs
         self.observation_times = observation_times
         self.x0 = x0
         self.augment = augment
-<<<<<<< HEAD
-        
-        if self.obs is None:
-            # solve with real beta & rho
-            self.obs = self.solve([np.log(8/3), np.log(28)])
-            
-        #calculate emperical Gamma, covariance matrix 
-        self.noise_variance = kwargs.pop('noise_variance', (np.cov(self.obs.T)) ) #np.diag
-        self.STlik = STlik
-        
-        if self.STlik:
-            C_x=GP(self.targets, l=.5, sigma2=np.sqrt(self.noise_variance), store_eig=True, jit=1e-2)
-=======
         self.STlik = STlik
         if self.STlik:
             self.augment = False #must be false when using spatiotemporal likelihood
@@ -115,7 +90,10 @@ class Lorenz:
         
         if self.obs is None:
             # solve with real beta & rho
-            G_u, timeaveG_u = self.solve([np.log(8/3), np.log(28)])
+            G_u, timeaveG_u = self.solve([np.log(10), np.log(8/3), np.log(28)])
+            if self.STlik:
+                #number of trail*3 -> 3
+                timeaveG_u = timeaveG_u.mean(axis=0)
             #3*t*trails for STlik=T, consistent with Cx*Ct
             self.obs = G_u.transpose((2,1,0)) if self.STlik else timeaveG_u
         #calculate emperical Gamma, covariance matrix 
@@ -128,7 +106,6 @@ class Lorenz:
         if self.STlik:
              
             C_x=GP(timeaveG_u, l=.5, sigma2=np.sqrt(self.noise_variance), store_eig=True, jit=1e-2)
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
             C_t=GP(self.observation_times, store_eig=True, l=.2, sigma2=np.sqrt(self.noise_variance))
             self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
     
@@ -151,23 +128,16 @@ class Lorenz:
     
         return t, x_t  
     
-    def solve(self, logu, t=None):
+    def solve(self, logu=[np.log(10), np.log(8/3), np.log(28)], t=None):
         """
         obtain du = G(u)-obs
         """
-<<<<<<< HEAD
-        #of trial N * t * 3
-        _, G_u = self.solve_lorenz(t, sigma=10.0, beta=np.exp(logu[0]), rho=np.exp(logu[1]))
-   
-        timeaveG_u = G_u.mean(axis=1) # #of trial N * 3
-=======
         
         #of trial N * t * 3
-        _, G_u = self.solve_lorenz(t, sigma=10.0, beta=np.exp(logu[0]), rho=np.exp(logu[1]))   
+        _, G_u = self.solve_lorenz(t, sigma=np.exp(logu[0]), beta=np.exp(logu[1]), rho=np.exp(logu[2]))   
         # N * 3, convert to 1 dimensional for GP(3,)
-        timeaveG_u = G_u.mean(axis=1).squeeze() if self.STlik else G_u.mean(axis=1)
+        timeaveG_u = G_u.mean(axis=1) if self.STlik else G_u.mean(axis=1)
         
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
         if self.augment:
             G_u2 = (G_u**2).mean(axis=1)
             xy = (G_u[:,:,0]*G_u[:,:,1]).mean(axis=1, keepdims = True)
@@ -175,30 +145,22 @@ class Lorenz:
             xz = (G_u[:,:,0]*G_u[:,:,2]).mean(axis=1, keepdims = True)
             timeaveG_u = np.hstack((timeaveG_u,G_u2,xy,yz,xz))
         
-<<<<<<< HEAD
-        return timeaveG_u
-    
-    def misfit(self, logu, option='nll'):
-=======
         return G_u, timeaveG_u
     
-    def misfit(self, logu, option='ll'):
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
+    def misfit(self, logu, drop=1, option='ll'):
         """
+        logu = [logsigma,logbeta,logrho], drop=1 means 1st is fixed and sample [logbeta,logrho]
         du: obs-G(u)
         noise_variance: likelihood Y ~ N(G(u), noise_variance)
         return: loglik
         """
-        
-<<<<<<< HEAD
-        timeaveG_u = self.solve(logu)
-        du = timeaveG_u - self.obs 
-        
-        if self.STlik:              
-            logpdf,half_ldet = self.stgp.matn0pdf(du)
-            res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
+        if drop==1:
+            logu = np.concatenate(([np.log(10)], logu))
+        elif drop==2:
+            logu = [logu[0],np.log(8/3),logu[1]]
         else:
-=======
+            logu = np.concatenate((logu, [np.log(28)]))
+            
         G_u, timeaveG_u = self.solve(logu)
         
         if self.STlik:
@@ -208,7 +170,6 @@ class Lorenz:
             res = {'ll':logpdf, 'quad':-(logpdf - half_ldet), 'both':[logpdf,-(logpdf - half_ldet)]}[option]
         else:
             du = timeaveG_u - self.obs 
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
             res = -np.sum(np.dot(du, np.linalg.inv(self.noise_variance))*du)
             #-np.sum( np.dot(np.dot(du[i], np.linalg.inv(cov)), du[i] ) for i in range(du.shape[0]) )
             #res = -np.sum(du*du/(2.*self.noise_variance) )
@@ -221,14 +182,14 @@ class Lorenz:
         """
         return np.log(stats.multivariate_normal.pdf(logu, mean=mean , cov=cov) )
 
-    def get_pospdf(self, logbeta, logrho):
+    def get_pospdf(self, logbeta, logrho, mean=np.array([1.2, 3.3]), cov=np.diag((.5**2,.15**2))):
         logu = [logbeta, logrho]
-        prior =  self.pdf_calc(logu, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
+        prior =  self.pdf_calc(logu, mean, cov)
         lik = self.misfit(logu)
         
         return prior + lik
     
-    def MH(self, logu, TARGET_SIGMA=None):
+    def MH(self, logu, TARGET_SIGMA=None, mean=np.array([1.2, 3.3]), cov=np.diag((.5**2,.15**2))):
     
         #metropolis hasting
         
@@ -238,8 +199,8 @@ class Lorenz:
         
         u_prop = np.random.multivariate_normal(mean=u_init, cov=TARGET_SIGMA)
         
-        prior_init = self.pdf_calc(u_init, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
-        prior_prop = self.pdf_calc(u_prop, np.array([1.2, 3.3]), np.diag((.5**2,.15**2)))
+        prior_init = self.pdf_calc(u_init, mean, cov)
+        prior_prop = self.pdf_calc(u_prop, mean, cov)
         
         like_init = self.misfit(u_init)
         like_prop = self.misfit(u_prop)
@@ -291,29 +252,22 @@ class Lorenz:
             
             u_list[epoch] = logu
             
-<<<<<<< HEAD
-        print('Acceptance ratio is: {}'.format(count/CHAIN_LEN))
-=======
-        if not useslice:
+        if not useslice:                          
             print('Acceptance ratio is: {}'.format(count/CHAIN_LEN))
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
     
         return u_list,count/CHAIN_LEN
     
         
 
+    
 
 if __name__ == '__main__':
     np.random.seed(2021)
     d = 3
     # if change obs from (x,y,z) to (x,y,z,x**2,y**2,z**2,xy,yz,xz) CES paper 9*9
     # (g(u)-obs)cov^(-1)(g(u)-obs) 10*9
-    augment = True
-<<<<<<< HEAD
-    N = 10
-=======
-    N = 1
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
+    augment = False
+    N = 1 #1 for STLik 10 for not
     x0 = -15 + 30 * np.random.random((N, d))   
     
     time_resolution = 40
@@ -323,11 +277,7 @@ if __name__ == '__main__':
     observation_times = np.linspace(t_1, t_final, num = time_resolution*t_final+1)
     
     #construct lorenz problem
-<<<<<<< HEAD
-    lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment)
-=======
     lorenz = Lorenz(observation_times[negini:], x0, obs=None, augment = augment, STlik=True)
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
     
     #check for forward evaluation G(u)
     #_,check = lorenz.solve_lorenz(beta=np.exp(np.log(8/3)),rho=np.exp(np.log(28))) 
@@ -336,13 +286,8 @@ if __name__ == '__main__':
     logu = gene_prior()
     
     #we don't need acceptance ratio for slice
-<<<<<<< HEAD
-    u_sample,_ = lorenz.pos_trace(logu, CHAIN_LEN=1000, useslice=True)
-    #u_sample,ar = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.005,.01)), CHAIN_LEN=1000, useslice=False)
-=======
     u_sampleslice,_ = lorenz.pos_trace(logu, CHAIN_LEN=1000, useslice=True)
     u_samplemh,ar = lorenz.pos_trace(logu, TARGET_SIGMA = np.diag((.005,.01)), CHAIN_LEN=1000, useslice=False)
->>>>>>> a84a5f2415d85d829ac49a70ca33728472f91a47
     
     
     pos_u = np.median(np.exp(u_sample[:]),axis=0)
