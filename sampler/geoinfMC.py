@@ -5,12 +5,12 @@ Shiwei Lan @ U of Warwick, 2016
 -------------------------------
 Created March 12, 2016
 -------------------------------
-Modified Aug. 6, 2020 @ ASU
+Modified Dec. 8, 2021 @ ASU
 """
 __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2016, The EQUIP/EQUiPS projects"
 __license__ = "GPL"
-__version__ = "1.2"
+__version__ = "1.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "S.Lan@warwick.ac.uk; lanzithinking@outlook.com; slan@asu.edu"
 
@@ -68,9 +68,9 @@ class geoinfMC:
         sample v ~ N(0,C) or N(0,invK(q))
         """
         if post_Ga is None:
-            v = self.model.prior['sample']()
+            v = self.model.prior.sample()
         else:
-            v = self.model.post_Ga['sample']()
+            v = self.model.post_Ga.sample()
         return v
         
     def pCN(self):
@@ -87,7 +87,7 @@ class geoinfMC:
         q = ((1-self.h/4)*self.q + np.sqrt(self.h)*v)/(1+self.h/4)
 
         # update geometry
-        ll,_,_,_=self.geom(q)
+        ll=self.geom(q)[0]
 
         # Metropolis test
         logr=ll-self.ll
@@ -114,7 +114,7 @@ class geoinfMC:
         v=self.randv()
 
         # natural gradient
-        ng=self.model.prior['cov'].dot(self.g)
+        ng=self.model.prior.C_act(self.g)
 
         # update velocity
         v+=rth/2*ng
@@ -129,10 +129,10 @@ class geoinfMC:
         v = (-(1-self.h/4)*v + rth*self.q)/(1+self.h/4)
 
         # update geometry
-        ll,g,_,_=self.geom(q)
+        ll,g=self.geom(q)[:2]
 
         # natural gradient
-        ng=self.model.prior['cov'].dot(g)
+        ng=self.model.prior.C_act(g)
 
         # new energy
         E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng)
@@ -163,7 +163,7 @@ class geoinfMC:
         v=self.randv()
 
         # natural gradient
-        ng=self.model.prior['cov'].dot(self.g)
+        ng=self.model.prior.C_act(self.g)
 
         # accumulate the power of force
         pw = rth/2*self.g.dot(v)
@@ -185,8 +185,8 @@ class geoinfMC:
 #             q=rot.real; v=rot.imag
 
             # update geometry
-            ll,g,_,_=self.geom(q)
-            ng=self.model.prior['cov'].dot(g)
+            ll,g=self.geom(q)[:2]
+            ng=self.model.prior.C_act(g)
 
             # another half step for velocity
             v+=rth/2*ng
@@ -225,13 +225,13 @@ class geoinfMC:
         v=self.randv(self.model.post_Ga)
 
         # natural gradient
-        ng=self.model.post_Ga['postC'](self.g) # use low-rank posterior Hessian solver
+        ng=self.model.post_Ga.postC_act(self.g) # use low-rank posterior Hessian solver
 
         # update velocity
         v+=rth/2*ng
 
         # current energy
-        E_cur = -self.ll - rth/2*self.g.dot(v) + self.h/8*self.g.dot(ng) +0.5*self.model.post_Ga['Hlr'].norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
+        E_cur = -self.ll - rth/2*self.g.dot(v) + self.h/8*self.g.dot(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
 
         # generate proposal according to simplified manifold Langevin dynamics
         q = ((1-self.h/4)*self.q + rth*v)/(1+self.h/4)
@@ -241,13 +241,13 @@ class geoinfMC:
 
         # update geometry
         ll,g,_,eigs=self.geom(q)
-        self.model.post_Ga['eigs']=eigs # update the eigen-pairs in low-rank approximation --important!
+        self.model.post_Ga.eigs=eigs # update the eigen-pairs in low-rank approximation --important!
 
         # natural gradient
-        ng=self.model.post_Ga['postC'](g)
+        ng=self.model.post_Ga.postC_act(g)
 
         # new energy
-        E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng) +0.5*self.model.post_Ga['Hlr'].norm2(v) -0.5*sum(np.log(1+eigs[0]))
+        E_prp = -ll - rth/2*g.dot(v) + self.h/8*g.dot(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+eigs[0]))
 
         # Metropolis test
         logr=-E_prp+E_cur
@@ -276,13 +276,13 @@ class geoinfMC:
         v=self.randv(self.model.post_Ga)
 
         # natural gradient
-        ng=self.model.post_Ga['postC'](self.g) # use low-rank posterior Hessian solver
+        ng=self.model.post_Ga.postC_act(self.g) # use low-rank posterior Hessian solver
 
         # accumulate the power of force
-        pw = rth/2*np.linalg.solve(self.model.prior['cov'],v).dot(ng)
+        pw = rth/2*self.model.prior.C_act(v,-1).dot(ng)
 
         # current energy
-        E_cur = -self.ll + self.h/4*self.model.prior['logpdf'](ng) +0.5*self.model.post_Ga['Hlr'].norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
+        E_cur = -self.ll + self.h/4*self.model.prior.logpdf(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+self.eigs[0])) # use low-rank Hessian inner product
 
         randL=np.int(np.ceil(np.random.uniform(0,self.L)))
 
@@ -299,20 +299,20 @@ class geoinfMC:
 
             # update geometry
             ll,g,_,eigs=self.geom(q)
-            self.model.post_Ga['eigs']=eigs # update the eigen-pairs in low-rank approximation --important!
-            ng=self.model.post_Ga['postC'](g)
+            self.model.post_Ga.eigs=eigs # update the eigen-pairs in low-rank approximation --important!
+            ng=self.model.post_Ga.postC_act(g)
 
             # another half step for velocity
             v+=rth/2*ng
 
             # accumulate the power of force
-            if l!=randL-1: pw+=rth*np.linalg.solve(self.model.prior['cov'],v).dot(ng)
+            if l!=randL-1: pw+=rth*self.model.prior.C_act(v,-1).dot(ng)
 
         # accumulate the power of force
-        pw += rth/2*np.linalg.solve(self.model.prior['cov'],v).dot(ng)
+        pw += rth/2*self.model.prior.C_act(v,-1).dot(ng)
 
         # new energy
-        E_prp = -ll + self.h/4*self.model.prior['logpdf'](ng) +0.5*self.model.post_Ga['Hlr'].norm2(v) -0.5*sum(np.log(1+eigs[0]))
+        E_prp = -ll + self.h/4*self.model.prior.logpdf(ng) +0.5*self.model.post_Ga.Hlr.norm2(v) -0.5*sum(np.log(1+eigs[0]))
 
         # Metropolis test
         logr=-E_prp+E_cur-pw

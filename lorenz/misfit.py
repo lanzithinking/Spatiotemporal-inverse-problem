@@ -43,14 +43,14 @@ class misfit:
         ode: Lorenz63 object
         obs_times: time points where observations are taken
         true_params: true parameters of Lorenz63 for which observations are obtained
-        avg_traj: whether to average the solution trajectories - False (whole trajectories); True (average trajectories); 'aug' (augment averaged trajectories with 2nd order interactions)
+        avg_traj: whether to average the solution along each of the trajectories - False (whole trajectories); True (average trajectories); 'aug' (augment averaged trajectories with 2nd order interactions)
         STlik: whether to use spatiotemporal models; has to be used with 'avg_traj=False'
         stgp: spatiotemporal GP kernel
         """
         self.ode = lrz63(**kwargs) if ode is None else ode
         if obs_times is None:
-            t_init = kwargs.pop('t_init',0.)
-            t_final = kwargs.pop('t_final',4.)
+            t_init = kwargs.pop('t_init',100.)
+            t_final = kwargs.pop('t_final',110.)
             time_res = kwargs.pop('time_res',100)
             self.obs_times = np.linspace(t_init, t_final, time_res)
         else:
@@ -70,8 +70,10 @@ class misfit:
                 # define STGP kernel for the likelihood (misfit)
                 # -- model 0 -- separable STGP
                 # self.stgp=STGP(spat=self.obs.mean(axis=0).T, temp=self.obs_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-                C_x=GP(self.obs.mean(axis=0).T, l=.5, sigma2=np.diag(np.sqrt(self.nzvar.mean(axis=0))), store_eig=True, jit=1e-2)
-                C_t=GP(self.obs_times, store_eig=True, l=.2, sigma2=np.sqrt(self.nzvar.mean(axis=0).sum()))#, ker_opt='matern',nu=.5)
+                sigma2_ = self.nzvar.mean(axis=0)
+                if np.ndim(self.nzvar)==3: sigma2_ = np.diag(sigma2_)
+                C_x=GP(self.obs.mean(axis=0).T, l=.5, sigma2=np.diag(np.sqrt(sigma2_)), store_eig=True, jit=1e-2)
+                C_t=GP(self.obs_times, store_eig=True, l=.2, sigma2=np.sqrt(sigma2_.sum()))#, ker_opt='matern',nu=.5)
                 # C_x=GP(self.obs.mean(axis=0).T, l=.4, jit=1e-2, sigma2=.1, store_eig=True)
                 # C_t=GP(self.obs_times, jit=1e-2, store_eig=True, l=.1, sigma2=.1, ker_opt='matern',nu=.5)
                 self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
@@ -86,20 +88,21 @@ class misfit:
         Obtain observations
         """
         fld=kwargs.pop('obs_file_loc',os.getcwd())
+        var_out=kwargs.pop('var_out','cov') # False, True, or 'cov
         try:
-            f=open(os.path.join(fld,'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj.pckl'),'rb')
+            f=open(os.path.join(fld,'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'),'rb')
             obs, nzvar=pickle.load(f)
             f.close()
-            print('Observation file '+'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj.pckl'+' has been read!')
+            print('Observation file '+'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'+' has been read!')
         except Exception as e:
             print(e)
             ode=kwargs.pop('ode',self.ode)
             params=kwargs.pop('params',tuple(self.true_params.values()))
             t=self.obs_times
             sol=ode.solve(params=params, t=t)
-            obs, nzvar=self.observe(sol, var_out=True)
+            obs, nzvar=self.observe(sol, var_out=var_out)
             if kwargs.pop('save_obs',True):
-                f=open(os.path.join(fld,'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj.pckl'),'wb')
+                f=open(os.path.join(fld,'Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'),'wb')
                 pickle.dump([obs, nzvar], f)
                 f.close()
         return obs, nzvar
@@ -107,22 +110,42 @@ class misfit:
     def observe(self, sol=None, var_out=False):
         """
         Observation operator
+        --------------------
+        var_out: option to output variance - False (no variances); True (only variance); 'cov' (whole covariance matrix)
         """
         if sol is None:
             sol = self.ode.solve(params=tuple(self.true_params.values()), t=self.obs_times)
         assert np.ndim(sol)==3, 'The shape of solution should be (num_traj, time_res, 3)!'
-        if var_out: nzvar = sol.var(axis=1)
+        num_traj = sol.shape[0]
+        # if var_out: nzvar = sol.var(axis=1)
         if self.avg_traj:
             obs = sol.mean(axis=1) # (num_traj, 3)
             ext = []; vxt = []
             if self.avg_traj=='aug':
-                for i in range(sol.shape[0]):
+                for i in range(num_traj):
                     ext.append(pdist(sol[i].T, metric=lambda u,v:np.mean(u*v)))
-                    if var_out: vxt.append(pdist(sol[i].T, metric=lambda u,v:np.var(u*v)))
+                    # if var_out: vxt.append(pdist(sol[i].T, metric=lambda u,v:np.var(u*v)))
                 obs = np.hstack([obs,np.mean(sol**2,axis=1),np.array(ext)]) # (num_traj, 9)
-                if var_out: nzvar = np.hstack([nzvar,np.var(sol**2,axis=1),np.array(vxt)])
+                # if var_out: nzvar = np.hstack([nzvar,np.var(sol**2,axis=1),np.array(vxt)])
         else:
             obs = sol # (num_traj, time_res, 3)
+        if var_out:
+            nzvar = []
+            for i in range(num_traj):
+                if self.avg_traj=='aug':
+                    xsol_i = []
+                    for ii in range(3):
+                        for jj in range(ii+1,3):
+                            xsol_i.append((sol[i,:,ii]*sol[i,:,jj])[:,None])
+                    xsol_i = np.hstack(xsol_i)
+                    solxt_i = np.hstack([sol[i],sol[i]**2,xsol_i])
+                else:
+                    solxt_i = sol[i]
+            if var_out=='cov':
+                nzvar.append(np.cov(solxt_i, rowvar=False))
+            else:
+                nzvar.append(solxt_i.var(axis=0))
+            nzvar = np.array(nzvar)
         return (obs, nzvar) if var_out else obs
     
     def cost(self, sol=None, option='nll'):
@@ -137,9 +160,12 @@ class misfit:
             logpdf,half_ldet = self.stgp.matn0pdf(np.swapaxes(dif_obs,0,2).reshape((np.prod(dif_obs.shape[1:]),-1),order='F'))
             res = {'nll':-logpdf, 'quad':-(logpdf - half_ldet), 'both':[-logpdf,-(logpdf - half_ldet)]}[option]
         else:
-            dif2_obs = dif_obs**2
-            if np.ndim(dif_obs)==3: dif2_obs = dif2_obs.sum(axis=1)
-            res = np.sum(dif2_obs/self.nzvar)/2
+            if np.ndim(dif_obs)==3: dif_obs = np.swapaxes(dif_obs, 1,2)
+            if np.ndim(self.nzvar)==3:
+                res = np.sum(dif_obs*np.linalg.solve(self.nzvar,dif_obs))/2
+            elif np.ndim(self.nzvar)==2:
+                if np.ndim(dif_obs)==3: self.nzvar = self.nzvar[:,:,None]
+                res = np.sum(dif_obs**2/self.nzvar)/2
         return res
         
     def grad(self, sol=None, wrt='obs_sol'):
@@ -155,10 +181,17 @@ class misfit:
             if np.ndim(dif_obs)==2:
                 T = len(self.obs_times)
                 # T = sol.shape[1]
-                dif_obs = dif_obs[:,None,:]
+                if np.ndim(self.nzvar)==3:
+                    d_obs = np.linalg.solve(self.nzvar, dif_obs)
+                elif np.ndim(self.nzvar)==2:
+                    d_obs = dif_obs/self.nzvar
+                d_obs = d_obs[:,None,:]
             elif np.ndim(dif_obs)==3:
                 T = 1
-            d_obs = dif_obs/self.nzvar[:,None,:] # (num_traj, 1, 3 or 9)
+                if np.ndim(self.nzvar)==3:
+                    d_obs = np.swapaxes(np.linalg.solve(self.nzvar, np.swapaxes(dif_obs, 1,2)), 1,2)
+                elif np.ndim(self.nzvar)==2:
+                    d_obs = dif_obs/self.nzvar[:,None,:]
             if wrt=='obs_sol':
                 g = d_obs
                 if g.shape[1]==1: g=np.squeeze(g, axis=1)
@@ -182,8 +215,8 @@ class misfit:
 if __name__ == '__main__':
     np.random.seed(2021)
     # define misfit
-    num_traj=1; avg_traj='aug'
-    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, save_obs=False, STlik=False)
+    num_traj=1; avg_traj='avg'; var_out='cov'
+    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, var_out=var_out, save_obs=False, STlik=False)
     
     # test gradient
     sol = mft.ode.solve(params=(10.0, 3.0, 28.0), t=mft.obs_times)
