@@ -62,9 +62,10 @@ if __name__=='__main__':
     t_final = 1100
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    avg_traj = False #'aug'
-    STlik = True # False
-    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, seed=seed, STlik=STlik)
+    avg_traj = 'aug'
+    var_out = True
+    STlik = False
+    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     
     # prepare for plotting data
     para0 = lrz.misfit.true_params

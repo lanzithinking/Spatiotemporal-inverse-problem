@@ -101,7 +101,7 @@ class Lorenz:
         x = self.x[STATE]
         self.x[ADJOINT] = self.ode.solveAdj(self.x[PARAMETER], self.misfit.obs_times, x, self.misfit, cont_soln=self.cont_soln)
         dt = np.diff(self.misfit.obs_times[:2])
-        grad = np.sum(self.x[ADJOINT]*np.stack([-(x[:,:,1]-x[:,:,0]), x[:,:,2], -x[:,:,0]], axis=-1), axis=(0,1)) *dt * self.x[PARAMETER] # exp transform
+        grad = np.sum(self.x[ADJOINT]*np.stack([-(x[:,:,1]-x[:,:,0]), x[:,:,2], -x[:,:,0]], axis=-1), axis=(0,1))[[0,2,1]] *dt * self.x[PARAMETER] # exp transform
         if not MF_only: grad += self.prior.grad(parameter)
         return grad
 
@@ -208,10 +208,11 @@ if __name__ == '__main__':
     t_final = 1100
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    avg_traj = False
-    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, seed=seed, STlik=True)
+    avg_traj = 'aug'
+    var_out = 'cov'
+    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False)
     # test
-    lrz.test(1e-10)
+    lrz.test(1e-8)
     # obtain MAP
     # map_v = lrz.get_MAP(init='zero',SAVE=True)
     # # compare it with the truth

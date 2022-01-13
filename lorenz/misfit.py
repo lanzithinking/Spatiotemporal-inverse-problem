@@ -55,7 +55,7 @@ class misfit:
             self.obs_times = np.linspace(t_init, t_final, time_res)
         else:
             self.obs_times = obs_times
-        self.true_params = kwargs.pop('true_params',{'sigma':10.0, 'beta':8./3, 'rho':28.0})
+        self.true_params = kwargs.pop('true_params',{'sigma':self.ode.sigma, 'beta':self.ode.beta, 'rho':self.ode.rho})
         self.avg_traj = kwargs.pop('avg_traj',True) # False, True, or 'aug'
         # get observations
         self.obs, self.nzvar = self.get_obs(**kwargs)
@@ -215,7 +215,7 @@ class misfit:
 if __name__ == '__main__':
     np.random.seed(2021)
     # define misfit
-    num_traj=1; avg_traj='avg'; var_out='cov'
+    num_traj=1; avg_traj='aug'; var_out='cov'
     mft = misfit(num_traj=num_traj, avg_traj=avg_traj, var_out=var_out, save_obs=False, STlik=False)
     
     # test gradient

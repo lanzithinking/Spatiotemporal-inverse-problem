@@ -37,7 +37,8 @@ def main(seed=2021):
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = 'aug' # True; 'aug'; False
-    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, seed=seed, STlik=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
+    var_out = 'cov' # True; 'cov'; False
+    lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
     
     # initialization
     unknown=lrz.prior.sample(add_mean=False)
