@@ -63,11 +63,12 @@ if __name__ == '__main__':
     
     
     def run(repeat=10, max_iter=10, J=500, stp_sz=[1,.1], nz_lvl=1, err_thld=1e-1, alg='EKS'):
-        res_ekssiml = []
+        # try multiple experiments with same setting -> std
+        res_enk = []
         for i in range(repeat):
-            res_ekssim = runek(max_iter, J, stp_sz, nz_lvl, err_thld, alg)
-            res_ekssiml.append(res_ekssim)
-        return res_ekssiml
+            curres = runek(max_iter, J, stp_sz, nz_lvl, err_thld, alg)
+            res_enk.append(curres)
+        return res_enk
     
     
     #create table for difference
