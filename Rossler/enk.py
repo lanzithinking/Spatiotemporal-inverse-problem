@@ -5,13 +5,19 @@ Created on Sun Jan 16 14:29:58 2022
 
 @author: apple
 """
-
+import argparse
 from Rossler import *
 sys.path.append( "../" )
 # from util import *
 from optimizer.EnK import EnK
 
 if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser()
+    parser.add_argument('algNO', nargs='?', type=int, default=0)
+    parser.add_argument('STlik', nargs='?', type=bool, default=False)
+    parser.add_argument('algs', nargs='?', type=str, default=('EKI','EKS'))
+    args = parser.parse_args()
 
     seed=2021
     np.random.seed(seed)
@@ -22,9 +28,9 @@ if __name__ == '__main__':
     t_final = 1100
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    avg_traj = 'aug'#False#
+    avg_traj = 'aug' if not args.STlik else False#False
     var_out = True
-    STlik = False#True
+    STlik = args.STlik#True
     rsl = Rossler(num_traj=num_traj, ode_params=ode_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     
     def G(u):
@@ -38,7 +44,7 @@ if __name__ == '__main__':
     data={'obs':y,'size':y.size,'cov': rsl.misfit.stgp.tomat() if rsl.misfit.STlik else np.diag(rsl.misfit.nzvar[0])}
     
      
-    def runek(max_iter=10, J=500, stp_sz=[1,.1], nz_lvl=1, err_thld=1e-1, alg='EKS'):
+    def runek(max_iter=10, J=500, stp_sz=[1,.1], nz_lvl=1, err_thld=1e-1, alg='EKS',save='True'):
         ''' EKS/EKI 
         max_iter: iteration
         J: ensemble size
@@ -53,48 +59,39 @@ if __name__ == '__main__':
         u=pri_samp(J)
         prior={'mean':rsl.prior.mean,'cov':np.diag(np.square(rsl.prior.std)),'sample':pri_samp}
         
-        eks=EnK(u,G,data,prior,stp_sz=stp_sz[alg=='EKS'],nz_lvl=nz_lvl,err_thld=err_thld,alg=alg,reg=True,adpt=True)
+        enk=EnK(u,G,data,prior,stp_sz=stp_sz[alg=='EKS'],nz_lvl=nz_lvl,err_thld=err_thld,alg=alg,adpt=True)
         # run ensemble Kalman algorithm
-        max_iter=max_iter
-        res_eks=eks.run(max_iter=max_iter)
+        if save:
+            ek_fun=enk.run
+            ek_args=(max_iter,True)
+            savepath,filename=ek_fun(*ek_args)
+            
+            # append ODE information including the count of solving
+            filename_=os.path.join(savepath,filename+'.pckl')
+            filename=os.path.join(savepath,'rossler_'+'ST_'+str(rsl.misfit.STlik)[0]+'_'+filename+'.pckl') # change filename
+            os.rename(filename_, filename)
+            f=open(filename,'ab')
+            
+            pickle.dump([ode_params,STlik,avg_traj,y],f)
+            f.close()
+        else:            
+            max_iter=max_iter
+            return (enk.run(max_iter=max_iter) )
         
-        return res_eks
-    
-    
-    
-    def run(repeat=10, max_iter=10, J=500, stp_sz=[1,.1], nz_lvl=1, err_thld=1e-1, alg='EKS'):
+    def run(repeat=10, stp_sz=[1,.1], nz_lvl=1, err_thld=1e-1, alg='EKS'):
         # try multiple experiments with same setting -> std
-        res_enk = []
-        for i in range(repeat):
-            curres = runek(max_iter, J, stp_sz, nz_lvl, err_thld, alg)
-            res_enk.append(curres)
-        return res_enk
-    
-    
-    #create table for difference
-    def diff(res_enkl=[res_ekssim], real_params=list(ode_params.values()) ):
-        diff = [0]*len(res_enkl)
-        for i,res_enk in enumerate(res_enkl):
-            diff[i] = np.linalg.norm(np.mean(res_enk[0],0) - real_params )/np.linalg.norm(real_params)
+        for j in [500]: 
+            for i in range(repeat):
+                runek(int(5000/j), j, stp_sz, nz_lvl, err_thld, alg)
         
-        return diff
+    run(alg=args.algs[args.algNO])
+            
         
-    
-    def collect(alg='EKI'):
-        # try different combinations with J and iter
-        res_ekl = []
-        for i in [100,200,250,500,1000]:        
-            res_ekl.append(  run(1, int(5000/i), i, alg=alg)[0] )
-        return diff(res_ekl)
-    
-    erroreki = collect()
-    erroreks = collect('EKS')
     
     
     
     
         
-    
     
     
     

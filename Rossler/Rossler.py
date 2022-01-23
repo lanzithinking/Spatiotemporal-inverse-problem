@@ -42,7 +42,7 @@ class Rossler:
         self.num_traj = num_traj
         self.ode_params = {'a':0.2, 'b':0.2, 'c':5.7} if ode_params is None else ode_params
         self.x0 = kwargs.pop('ode_init' ,-7 + 14 * np.random.random((self.num_traj, 3)))
-        self.prior_params = {'mean':[-2, -2, 2], 'std':[0.1, 0.1, 0.2]} if prior_params is None else prior_params
+        self.prior_params = {'mean':[-1.5, -1.5, 2], 'std':[0.15, 0.15, 0.2]} if prior_params is None else prior_params
         if obs_times is None:
             t_init = kwargs.pop('t_init',0.)
             t_final = kwargs.pop('t_final',4.)
