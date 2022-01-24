@@ -55,7 +55,7 @@ for m in range(num_mdls):
                 f=open(os.path.join(folder,f_i),'rb')
                 f_read=pickle.load(f)
                 extra_info=pickle.load(f)                
-                cur = [np.linalg.norm(f_read[0][j,:] - true_param )/np.linalg.norm(true_param) for j in range(int(5000/int(lik_mdls[m][2:]) ))]
+                cur = [np.linalg.norm(np.exp(f_read[0][j,:]) - true_param )/np.linalg.norm(true_param) for j in range(int(5000/int(lik_mdls[m][2:]) ))]
                 errs.append(np.min(cur))
                 num_read+=1
                 f.close()
