@@ -53,33 +53,33 @@ def main(seed=2021):
     # G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze() for u_j in u])
     if args.ensemble_size>200:
         n_jobs = np.min([10, multiprocessing.cpu_count()])
-        # G=np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
+        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
     # y=rsl.misfit.obs[0]
     if STlik:
         if args.ensemble_size<=200:
             G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten() for u_j in u])
         else:
-            G=np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten())(u_j) for u_j in u))
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten())(u_j) for u_j in u))
         y=rsl.misfit.obs[0].flatten()
         nz_cov=rsl.misfit.stgp.tomat()
     else:
         if args.ensemble_size<=200:
             G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze() for u_j in u])
         else:
-            G=np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
         y=rsl.misfit.obs[0]
         nz_cov=np.diag(rsl.misfit.nzvar[0]) if np.ndim(rsl.misfit.nzvar)==2 else rsl.misfit.nzvar[0]
     data={'obs':y,'size':y.size,'cov':nz_cov}
     prior={'mean':rsl.prior.mean,'cov':np.diag(rsl.prior.std)**2,'sample':rsl.prior.sample}
     
     # EnK parameters
-    nz_lvl=1
-    err_thld=1e-1
+    nz_lvl=1.0
+    err_thld=1e-2
     
     # run EnK to generate ensembles
     print("Preparing %s with step size %g for %s model..."
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.mdls[args.mdlNO]))
-    ek=EnK(u0,G,data,prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,alg=args.algs[args.algNO],reg=True,adpt=True)
+    ek=EnK(u0,G,data,prior,stp_sz=args.step_sizes[args.algNO],nz_lvl=nz_lvl,err_thld=err_thld,alg=args.algs[args.algNO],adpt=True)
     ek_fun=ek.run
     ek_args=(args.max_iter,True)
     savepath,filename=ek_fun(*ek_args)
