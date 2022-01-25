@@ -1,5 +1,5 @@
 """
-Get relative error of mean for uncertainty field u in chaotic inverse problem.
+Get relative error of mean (rem) in EnK algorithms for uncertainty field u in chaotic inverse problem.
 Shiwei Lan @ ASU, 2022
 ----------------------
 """
@@ -13,14 +13,14 @@ import dolfin as df
 # truth
 true_param = list({'a':0.2, 'b':0.2, 'c':5.7}.values())
 
-# algorithms
+# algorithms and settings
 algs=('EKI','EKS')
 num_algs=len(algs)
-# store results
 lik_mdls=('simple','STlik')
 num_mdls=len(lik_mdls)
 ensbl_szs=[50,100,200,500,1000]
 num_ensbls=len(ensbl_szs)
+# store results
 rem_m=np.zeros((num_mdls,num_algs,num_ensbls))
 rem_s=np.zeros((num_mdls,num_algs,num_ensbls))
 # obtain estimates
@@ -35,7 +35,7 @@ for m in range(num_mdls):
         for j in range(num_ensbls):
             print('Getting estimates for '+algs[i]+' algorithm with '+str(ensbl_szs[j])+' ensembles...')
             # calculate posterior estimates
-            errs=[]
+            rems=[]
             num_read=0
             for f_i in pckl_files:
                 if '_'+algs[i]+'_ensbl'+str(ensbl_szs[j]) in f_i:
@@ -45,7 +45,7 @@ for m in range(num_mdls):
                         u_est,err=f_read[:2]
                         u_est=u_est[err!=0]; err=err[err!=0]
                         param_est=u_est[np.argmin(err)-1]
-                        errs.append(np.linalg.norm(np.exp(u_est)-true_param)/np.linalg.norm(true_param))
+                        rems.append(np.linalg.norm(np.exp(param_est)-true_param)/np.linalg.norm(true_param))
                         num_read+=1
                         f.close()
                         print(f_i+' has been read!')
@@ -53,9 +53,9 @@ for m in range(num_mdls):
                         pass
             print('%d experiment(s) have been processed for %s algorithm with %d ensembles for %s likelihood model.' % (num_read, algs[i], ensbl_szs[j], lik_mdls[m]))
             if num_read>0:
-                errs = np.stack(errs)
-                rem_m[m,i,j] = np.median(errs)
-                rem_s[m,i,j] = errs.std()
+                rems = np.stack(rems)
+                rem_m[m,i,j] = np.median(rems)
+                rem_s[m,i,j] = rems.std()
 # save
 import pandas as pd
 # rem_m = pd.DataFrame(data=rem_m,index=lik_mdls,columns=alg_names[:num_algs])
