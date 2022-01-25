@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -34,7 +34,8 @@ class rossler:
         """
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
-            self.x0 = -7 + 14 * np.random.random((self.num_traj, 3))
+            rng = np.random.RandomState(kwargs.get('randinit_seed')) if 'randinit_seed' in kwargs else np.ranodm
+            self.x0 = -7 + 14 * rng.random((self.num_traj, 3))
         else:
             self.x0 = x0
             self.num_traj = x0.shape[0] if np.ndim(x0)>1 else 1

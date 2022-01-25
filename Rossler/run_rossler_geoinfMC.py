@@ -6,7 +6,6 @@ Shiwei Lan @ ASU, 2021
 # modules
 import os,argparse,pickle
 import numpy as np
-import dolfin as df
 
 # the inverse problem
 from Rossler import Rossler
