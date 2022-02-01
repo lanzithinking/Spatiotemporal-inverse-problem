@@ -34,7 +34,8 @@ class lrz63:
         """
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
-            self.x0 = -15 + 30 * np.random.random((self.num_traj, 3))
+            rng = np.random.RandomState(kwargs.get('randinit_seed')) if 'randinit_seed' in kwargs else np.random
+            self.x0 = -15 + 30 * rng.random((self.num_traj, 3))
         else:
             self.x0 = x0
             self.num_traj = x0.shape[0] if np.ndim(x0)>1 else 1

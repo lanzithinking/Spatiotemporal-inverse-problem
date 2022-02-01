@@ -58,13 +58,13 @@ if __name__=='__main__':
     
     # define Bayesian inverse problem
     num_traj = 1
-    t_init = 1000
-    t_final = 1100
+    t_init = 100
+    t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    avg_traj = 'aug'
-    var_out = True
-    STlik = False
+    avg_traj = False
+    var_out = 'cov'
+    STlik = 'sep'
     lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     
     # prepare for plotting data
@@ -80,6 +80,6 @@ if __name__=='__main__':
     g = sns.PairGrid(grid_data, diag_sharey=False, corner=True, size=3)
     g.map_diag(plot_pdf, para0=para0, f=lambda param:lrz._get_misfit(parameter=np.log(param)))
     g.map_lower(contour, para0=para0, f=lambda param:np.exp(-lrz._get_misfit(parameter=np.log(param))), cmap='gray')
-    g.savefig(os.path.join(os.getcwd(),'properties/pairpdf'+('_STlik' if STlik else '_simple')+'.png'),bbox_inches='tight')
+    g.savefig(os.path.join(os.getcwd(),'properties/pairpdf'+('_simple' if not STlik else '_STlik_'+STlik)+'.png'),bbox_inches='tight')
     t_end=time.time()
     print('time used: %.5f'% (t_end-t_start))

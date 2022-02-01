@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -23,9 +23,7 @@ https://github.com/lanzithinking/Spatiotemporal-inverse-problem
 '''
 # import modules
 import numpy as np
-from scipy import integrate
-import scipy.stats as stats
-import matplotlib.pyplot as plt
+from scipy import integrate, optimize
 import sys, os
 
 from ode import *
@@ -41,8 +39,8 @@ class Lorenz:
         """
         self.num_traj = num_traj
         self.ode_params = {'sigma':10.0, 'beta':8./3, 'rho':28.0} if ode_params is None else ode_params
-        self.x0 = kwargs.pop('ode_init' ,-15 + 30 * np.random.random((self.num_traj, 3)))
-        self.prior_params = {'mean':[1.8, 1.2, 3.3], 'std':[1.0, 0.5, 0.15]} if prior_params is None else prior_params
+        self.x0 = kwargs.pop('ode_init', -15 + 30 * np.random.RandomState(kwargs.pop('randinit_seed',2021)).random((self.num_traj, 3))) # fixed initial condition
+        self.prior_params = {'mean':[2.0, 1.2, 3.3], 'std':[0.2, 0.5, 0.15]} if prior_params is None else prior_params
         if obs_times is None:
             t_init = kwargs.pop('t_init',0.)
             t_final = kwargs.pop('t_final',4.)
@@ -150,7 +148,38 @@ class Lorenz:
         """
         Get the maximum a posterior (MAP).
         """
-        raise NotImplementedError('MAP not implemented.')
+        import time
+        sep = "\n"+"#"*80+"\n"
+        print( sep, "Find the MAP point", sep)
+        # set up initial point
+        param0 = {'current':self.x[PARAMETER], 'random':self.prior.sample(), 'zero':np.zeros_like(self.x[PARAMETER])}[init]
+        self.x[PARAMETER] = param0
+        fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
+        grad = lambda parameter: self._get_grad(parameter, MF_only=False)
+        # solve for MAP
+        start = time.time()
+        res = optimize.minimize(fun, param0, method='BFGS', jac=grad, options={'gtol': 1e-4, 'disp': True})
+        end = time.time()
+        print('\nTime used is %.4f' % (end-start))
+        # print out info
+        if res.success:
+            print('\nConverged in ', res.nit, ' iterations.')
+        else:
+            print('\nNot Converged.')
+        print('Final function value: %.4f.\n' % res.fun)
+        
+        self.x[PARAMETER] = res.x
+        MAP = self.x
+        
+        if SAVE:
+            import pickle
+            fld_name='properties'
+            self._check_folder(fld_name)
+            f = open(os.path.join(fld_name,'MAP.pckl'),'wb')
+            pickle.dump(MAP, f)
+            f.close()
+        
+        return MAP[PARAMETER]
     
     def _check_folder(self,fld_name='result'):
         """
@@ -168,8 +197,8 @@ class Lorenz:
         Demo to check results with the adjoint method against the finite difference method.
         """
         # random sample parameter
-        parameter = self.prior.sample(add_mean=False)
-        # parameter = np.log(list(self.misfit.true_params.values())) + .1*np.random.randn(3)
+        parameter = self.prior.sample(add_mean=True)
+        # parameter = np.log(list(self.misfit.true_params.values())) + .1*np.random.randn(len(self.x[PARAMETER]))
         
         # MF_only = True
         import time
@@ -204,8 +233,8 @@ if __name__ == '__main__':
     np.random.seed(seed)
     # define Bayesian inverse problem
     num_traj = 1
-    t_init = 1000
-    t_final = 1100
+    t_init = 100
+    t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = 'aug'
@@ -214,11 +243,12 @@ if __name__ == '__main__':
     # test
     lrz.test(1e-8)
     # obtain MAP
-    # map_v = lrz.get_MAP(init='zero',SAVE=True)
+    map_v = lrz.get_MAP(init='random',SAVE=True)
+    print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     # # compare it with the truth
-    # true_param = [10.0, 8./3, 28.0]
-    # relerr = np.linalg.norm(map_v-true_param)/np.linalg.norm(true_param)
-    # print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
+    true_param = list(lrz.misfit.true_params.values())
+    relerr = np.linalg.norm(map_v-true_param)/np.linalg.norm(true_param)
+    print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
     # # report the minimum cost
     # min_cost = lrz._get_misfit(map_v)
     # print('Minimum cost: %.4f' % min_cost)

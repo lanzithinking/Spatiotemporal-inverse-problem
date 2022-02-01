@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -22,7 +22,7 @@ class prior:
     """
     (Log-Normal) prior for parameters in Lorenz63 inverse problem.
     """
-    def __init__(self, mean=[1.8, 1.2, 3.3], std=[1.0, 0.5, 0.15]):
+    def __init__(self, mean=[2.0, 1.2, 3.3], std=[0.2, 0.5, 0.15]):
         """
         mean and standard deviation for logarithms of (sigma, beta, rho)
         """
@@ -70,15 +70,18 @@ class prior:
         else:
             return logpri
         
-    def C_act(self, u_actedon, comp=1):
+    def C_act(self, u_actedon=None, comp=1):
         """
         Compute operation of C^comp on vector u: u --> C^comp * u
         """
-        if comp==0:
-            return u_actedon
+        if u_actedon is None:
+            return np.diag(np.power(self.std,comp*2))
         else:
-            Cu = np.power(self.std,comp*2)*u_actedon
-            return Cu
+            if comp==0:
+                return u_actedon
+            else:
+                Cu = np.expand_dims(np.power(self.std,comp*2),axis=list(range(1,u_actedon.ndim)))*u_actedon
+                return Cu
 
 if __name__ == '__main__':
     np.random.seed(2021)
