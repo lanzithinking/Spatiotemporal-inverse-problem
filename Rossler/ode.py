@@ -34,7 +34,7 @@ class rossler:
         """
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
-            rng = np.random.RandomState(kwargs.get('randinit_seed')) if 'randinit_seed' in kwargs else np.ranodm
+            rng = np.random.RandomState(kwargs.get('randinit_seed')) if 'randinit_seed' in kwargs else np.random
             self.x0 = -7 + 14 * rng.random((self.num_traj, 3))
         else:
             self.x0 = x0

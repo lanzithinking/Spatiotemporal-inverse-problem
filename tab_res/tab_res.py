@@ -49,3 +49,27 @@ try:
     f.close()
 except Exception as e:
     print(e)
+
+# algs=('EKI','EKS')
+# num_algs=len(algs)
+
+# Rossler dynamical inverse problem
+# relative error of mean in posterior estimates
+try:
+    rem_m = pd.read_csv('../Rossler/analysis/REM-mean.csv')
+    rem_s = pd.read_csv('../Rossler/analysis/REM-std.csv')
+    sumry = rem_m
+    fmt = lambda x: "%.2e" % x if abs(x)<.01 else "%.2f" % x
+    for i in range(sumry.shape[0]):
+        for j in range(1,sumry.shape[1]):
+            # sumry.iat[i,j] = str("%.2g" % sumry.iat[i,j])+' ('+np.array2string(rem_s.iat[i,j],formatter={'float_kind':lambda x: "%.2g" % x})+')'
+            sumry.iat[i,j] = str(fmt(sumry.iat[i,j]))+' ('+str(fmt(rem_s.iat[i,j]))+')'
+    # sumry.columns = alg_names[:num_algs]
+    sumry.columns.values[0] = 'Model-Algorithms'
+    sumry_tab = sumry.to_latex(index=False, escape=False)
+    # print(sumry_tab)
+    f = open('../Rossler/analysis/comparelik.tex', 'w')
+    f.write(sumry_tab)
+    f.close()
+except Exception as e:
+    print(e)

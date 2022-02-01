@@ -6,7 +6,6 @@ Shiwei Lan @ ASU, 2022
 
 import os,pickle
 import numpy as np
-import dolfin as df
 
 
 # seed=2021
@@ -18,7 +17,7 @@ algs=('EKI','EKS')
 num_algs=len(algs)
 lik_mdls=('simple','STlik')
 num_mdls=len(lik_mdls)
-ensbl_szs=[50,100,200,500,1000]
+ensbl_szs=[50,100,500,1000]
 num_ensbls=len(ensbl_szs)
 # store results
 rems=np.empty((num_mdls,num_algs,num_ensbls,10,50)); rems.fill(np.nan)

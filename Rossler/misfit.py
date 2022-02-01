@@ -85,29 +85,32 @@ class misfit:
                     self.stgp=GP(self.obs.mean(axis=0).flatten(), l=.3, sigma2=sigma2, store_eig=True, jit=1e-2)
                 else:
                     raise NotImplementedError('Model not implemented!')
-        
+    
     def get_obs(self, **kwargs):
         """
         Obtain observations
         """
-        fld=kwargs.pop('obs_file_loc',os.getcwd())
+        obs_file_loc=kwargs.pop('obs_file_loc',os.getcwd())
         var_out=kwargs.pop('var_out','cov') # False, True, or 'cov
-        try:
-            f=open(os.path.join(fld,'Rossler_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'),'rb')
+        obs_file_name='Rossler_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'
+        use_saved_obs=kwargs.pop('use_saved_obs',True)
+        if use_saved_obs and os.path.exists(os.path.join(obs_file_loc,obs_file_name)):
+            f=open(os.path.join(obs_file_loc,obs_file_name),'rb')
             obs, nzvar=pickle.load(f)
             f.close()
-            print('Observation file '+'Rossler_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'+' has been read!')
-        except Exception as e:
-            print(e)
+            print('Observation file '+obs_file_name+' has been read!')
+        else:
             ode=kwargs.pop('ode',self.ode)
             params=kwargs.pop('params',tuple(self.true_params.values()))
             t=self.obs_times
             sol=ode.solve(params=params, t=t)
             obs, nzvar=self.observe(sol, var_out=var_out)
-            if kwargs.pop('save_obs',True):
-                f=open(os.path.join(fld,'Rossler_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'),'wb')
+            save_obs=kwargs.pop('save_obs',True)
+            if save_obs:
+                f=open(os.path.join(obs_file_loc,obs_file_name),'wb')
                 pickle.dump([obs, nzvar], f)
                 f.close()
+            print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
         return obs, nzvar
     
     def observe(self, sol=None, var_out=False):

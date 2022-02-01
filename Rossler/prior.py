@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-The prior of Lorenz inverse problem 
+The prior of Rossler inverse problem 
 -------------------------------------------------------------------------
 Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 
@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 
 class prior:
     """
-    (Log-Normal) prior for parameters in Lorenz63 inverse problem.
+    (Log-Normal) prior for parameters in Rossler inverse problem.
     """
     def __init__(self, mean=[-1.5, -1.5, 2], std=[0.15, 0.15, 0.2]):
         """
