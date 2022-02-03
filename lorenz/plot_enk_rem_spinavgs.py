@@ -24,7 +24,7 @@ times=[10*(j+1) for j in range(10)]
 num_times=len(times)
 # store results
 rems_spins=np.zeros((num_mdls,num_algs,num_times,10))
-rems_avgs=np.zeros((num_mdls,num_algs,num_times,30))
+rems_avgs=np.zeros((num_mdls,num_algs,num_times,10))
 # obtain estimates
 folder = './analysis_spinavgs'
 for m in range(num_mdls):
@@ -60,15 +60,16 @@ import matplotlib.pyplot as plt
 # error bar plot
 fig,axes = plt.subplots(nrows=num_cfgs,ncols=num_algs,sharex=False,sharey=False,figsize=(15,12))
 for i,ax in enumerate(axes.flat):
+    times_=[0.1*t for t in times] if i//num_cfgs else times
     for j in range(num_mdls):
         rems={0:rems_spins,1:rems_avgs}[i//num_cfgs]
         # m=np.nanmean(rems[j,i%num_algs,:,:],axis=-1)
         # s=np.nanstd(rems[j,i%num_algs,:,:],axis=-1)
-        # ax.plot(times, m,linestyle='-')
-        # ax.fill_between(times,m-1.96*s,m+1.96*s,alpha=.1*(j+1))
+        # ax.plot(times_, m,linestyle='-')
+        # ax.fill_between(times_,m-1.96*s,m+1.96*s,alpha=.1*(j+1))
         m,l,u=np.nanquantile(rems[j,i%num_algs,:,:],q=[.5,.025,.975],axis=-1)
-        ax.semilogy(times, m,linestyle='-')
-        ax.fill_between(times,l,u,alpha=.1*(j+1))
+        ax.semilogy(times_, m,linestyle='-')
+        ax.fill_between(times_,l,u,alpha=.1*(j+1))
     ax.set_title(algs[i%num_algs],fontsize=16)
     ax.set_xlabel({0:'spin-ups',1:'average-lengths'}[i//num_cfgs],fontsize=15)
     ax.set_ylabel('relative error of estimate',fontsize=15)
