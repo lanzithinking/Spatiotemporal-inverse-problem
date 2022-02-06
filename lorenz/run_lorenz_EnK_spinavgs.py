@@ -48,7 +48,7 @@ def main(seed=2021, t0=100, t_res=100):
     var_out = 'cov' # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
     lrz = Lorenz(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik,
-                  use_saved_obs=False, save_obs=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
+                  use_saved_obs=True, save_obs=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
     
     # initialization
     u0=lrz.prior.sample(n=args.ensemble_size)

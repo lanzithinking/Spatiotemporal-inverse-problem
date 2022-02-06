@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -96,7 +96,18 @@ class misfit:
         use_saved_obs=kwargs.pop('use_saved_obs',True)
         if use_saved_obs and os.path.exists(os.path.join(obs_file_loc,obs_file_name)):
             f=open(os.path.join(obs_file_loc,obs_file_name),'rb')
-            obs, nzvar=pickle.load(f)
+            loaded=pickle.load(f)
+            obs, nzvar=loaded[:2]
+            if len(loaded)==3:
+                times=loaded[2]
+                if len(self.obs_times)<len(times):
+                    d=abs(self.obs_times-times[:,None])
+                    obs=obs[:,np.argmin(d,axis=0),:]
+                    dt=np.ptp(self.obs_times)/len(self.obs_times)
+                    msk=(np.min(d,axis=0)<dt)
+                    if not np.all(msk):
+                        self.obs_times=self.obs_times[msk]
+                        obs=obs[:,msk,:]
             f.close()
             print('Observation file '+obs_file_name+' has been read!')
         else:
@@ -108,7 +119,9 @@ class misfit:
             save_obs=kwargs.pop('save_obs',True)
             if save_obs:
                 f=open(os.path.join(obs_file_loc,obs_file_name),'wb')
-                pickle.dump([obs, nzvar], f)
+                dump_list=[obs, nzvar]
+                if not self.avg_traj: dump_list.append(self.obs_times)
+                pickle.dump(dump_list, f)
                 f.close()
             print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
         return obs, nzvar

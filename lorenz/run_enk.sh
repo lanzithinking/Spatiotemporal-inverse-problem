@@ -4,7 +4,7 @@
 #SBATCH -c 5                        # number of "tasks" (cores)
 #SBATCH --mem=64G                   # GigaBytes of memory required (per node)
 
-#SBATCH -p serial                   # partition 
+#SBATCH -p parallel                 # partition 
 #SBATCH -q normal                   # QOS
 
 #SBATCH -t 1-12:00                  # wall time (D-HH:MM)

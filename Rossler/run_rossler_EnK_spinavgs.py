@@ -48,7 +48,7 @@ def main(seed=2021, t0=100, t_res=100):
     var_out = True # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
     rsl = Rossler(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik,
-                  use_saved_obs=False, save_obs=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
+                  use_saved_obs=True, save_obs=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
     
     # initialization
     u0=rsl.prior.sample(n=args.ensemble_size)
@@ -90,7 +90,7 @@ def main(seed=2021, t0=100, t_res=100):
     return_list=return_list[:2]+return_list[3:]
     return_list+=(obs_times,avg_traj,STlik,var_out,y,args)
     # save
-    savepath=savepath=os.path.join(os.getcwd(),args.mdls[args.mdlNO]+'_Tinit')
+    savepath=savepath=os.path.join(os.getcwd(),args.mdls[args.mdlNO]+'_T')
     if not os.path.exists(savepath):
         print('Save path does not exist; created one.')
         os.makedirs(savepath)
@@ -111,8 +111,8 @@ if __name__ == '__main__':
             try:
                 sep = "\n"+"*-"*40+"*\n"
                 print(sep, "Running for time setting %d with seed %d ..."% (j, seed_i), sep)
-                main(seed=seed_i, t0=10*(j+1))
-                # main(seed=seed_i, t_res=10*(j+1))
+                # main(seed=seed_i, t0=10*(j+1))
+                main(seed=seed_i, t_res=10*(j+1))
                 n_success+=1
             except Exception as e:
                 print(e)

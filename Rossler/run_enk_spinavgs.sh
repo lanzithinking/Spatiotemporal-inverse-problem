@@ -1,10 +1,10 @@
 #!/bin/bash
  
 #SBATCH -N 1                        # number of compute nodes
-#SBATCH -c 1                        # number of "tasks" (cores)
-#SBATCH --mem=128G                   # GigaBytes of memory required (per node)
+#SBATCH -c 5                        # number of "tasks" (cores)
+#SBATCH --mem=64G                   # GigaBytes of memory required (per node)
 
-#SBATCH -p serial                   # partition 
+#SBATCH -p parallel                   # partition 
 #SBATCH -q normal                   # QOS
 
 #SBATCH -t 2-12:00                  # wall time (D-HH:MM)
