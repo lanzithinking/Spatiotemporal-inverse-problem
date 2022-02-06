@@ -22,7 +22,7 @@ np.set_printoptions(precision=3, suppress=True)
 # seed=2021
 # np.random.seed(seed)
 
-def main(seed=2021, t0=100, t_res=100):
+def main(seed=2021, t0=1000, t_res=100):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('mdlNO', nargs='?', type=int, default=0)

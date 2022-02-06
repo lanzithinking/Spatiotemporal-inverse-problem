@@ -94,23 +94,29 @@ class misfit:
         var_out=kwargs.pop('var_out','cov') # False, True, or 'cov
         obs_file_name='Lorenz_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'
         use_saved_obs=kwargs.pop('use_saved_obs',True)
-        if use_saved_obs and os.path.exists(os.path.join(obs_file_loc,obs_file_name)):
-            f=open(os.path.join(obs_file_loc,obs_file_name),'rb')
-            loaded=pickle.load(f)
-            obs, nzvar=loaded[:2]
-            if len(loaded)==3:
-                times=loaded[2]
-                if len(self.obs_times)<len(times):
+        if use_saved_obs:
+            try:
+                f=open(os.path.join(obs_file_loc,obs_file_name),'rb')
+                loaded=pickle.load(f)
+                obs, nzvar=loaded[:2]
+                if len(loaded)==3:
+                    times=loaded[2]
                     d=abs(self.obs_times-times[:,None])
                     obs=obs[:,np.argmin(d,axis=0),:]
                     dt=np.ptp(self.obs_times)/len(self.obs_times)
                     msk=(np.min(d,axis=0)<dt)
+                    if not np.any(msk):
+                        raise ValueError('No time series found!')
                     if not np.all(msk):
                         self.obs_times=self.obs_times[msk]
                         obs=obs[:,msk,:]
-            f.close()
-            print('Observation file '+obs_file_name+' has been read!')
-        else:
+                        print('Partial time series found!')
+                f.close()
+                print('Observation file '+obs_file_name+' has been read!')
+            except Exception as e:
+                print(e); pass
+                use_saved_obs=False
+        if not use_saved_obs:
             ode=kwargs.pop('ode',self.ode)
             params=kwargs.pop('params',tuple(self.true_params.values()))
             t=self.obs_times
