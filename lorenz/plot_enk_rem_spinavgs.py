@@ -16,6 +16,7 @@ true_param = list({'sigma':10.0, 'beta':8./3, 'rho':28.0}.values())
 algs=('EKI','EKS')
 num_algs=len(algs)
 lik_mdls=('simple','STlik')
+mdl_names=('time-average','STGP')
 num_mdls=len(lik_mdls)
 ensbl_sz=500
 configs=('Tinit','T')
@@ -63,18 +64,18 @@ for i,ax in enumerate(axes.flat):
     times_=[0.1*t for t in times] if i//num_cfgs else times
     for j in range(num_mdls):
         rems={0:rems_spins,1:rems_avgs}[i//num_cfgs]
-        # m=np.nanmean(rems[j,i%num_algs,:,:],axis=-1)
-        # s=np.nanstd(rems[j,i%num_algs,:,:],axis=-1)
-        # ax.plot(times_, m,linestyle='-')
-        # ax.fill_between(times_,m-1.96*s,m+1.96*s,alpha=.1*(j+1))
-        m,l,u=np.nanquantile(rems[j,i%num_algs,:,:],q=[.5,.025,.975],axis=-1)
-        ax.semilogy(times_, m,linestyle='-')
-        ax.fill_between(times_,l,u,alpha=.1*(j+1))
-    ax.set_title(algs[i%num_algs],fontsize=16)
-    ax.set_xlabel({0:'spin-ups',1:'average-lengths'}[i//num_cfgs],fontsize=15)
-    ax.set_ylabel('relative error of estimate',fontsize=15)
-    leg=ax.legend(lik_mdls, frameon=False)
-plt.subplots_adjust(wspace=0.2, hspace=0.2)
+        m=np.nanmean(rems[j,i%num_algs,:,:],axis=-1)
+        s=np.nanstd(rems[j,i%num_algs,:,:],axis=-1)
+        ax.plot(times_, m,linestyle='-')
+        ax.fill_between(times_,m-1.96*s,m+1.96*s,alpha=.1*(j+1))
+        # m,l,u=np.nanquantile(rems[j,i%num_algs,:,:],q=[.5,.025,.975],axis=-1)
+        # ax.semilogy(times_, m,linestyle='-')
+        # ax.fill_between(times_,l,u,alpha=.1*(j+1))
+    ax.set_title(algs[i%num_algs],fontsize=18)
+    ax.set_xlabel({0:'spin-up ($t\_0$)',1:'window size ($T$)'}[i//num_cfgs],fontsize=16)
+    ax.set_ylabel('relative error of estimate',fontsize=16)
+    leg=ax.legend(mdl_names, fontsize=15, frameon=False)
+plt.subplots_adjust(wspace=0.2, hspace=0.25)
 # save plot
 # fig.tight_layout()
 # folder = './analysis'

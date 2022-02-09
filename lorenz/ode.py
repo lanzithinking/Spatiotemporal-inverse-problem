@@ -155,9 +155,9 @@ class lrz63:
         # ax.axis('off')
         
         # prepare the axes limits
-        ax.set_xlim((-25, 25))
-        ax.set_ylim((-35, 35))
-        ax.set_zlim((5, 55))
+        ax.set_xlim((-25, 25)); ax.set_xlabel('x')
+        ax.set_ylim((-35, 35)); ax.set_ylabel('y')
+        ax.set_zlim((5, 55)); ax.set_zlabel('z')
         
         # choose a different color for each trajectory
         colors = plt.cm.jet(np.linspace(0, 1, num_traj))
@@ -177,12 +177,13 @@ if __name__ == '__main__':
     import os
     import pandas as pd
     import seaborn as sns
+    sns.set(font_scale=1.1)
     
     #### -- demonstration -- ####
     num_traj = 10
     ode = lrz63(num_traj=num_traj,max_time=5,time_res=1000)
     x_t = ode.solve()
-    fig = plt.figure(figsize=(12,5))
+    fig = plt.figure(figsize=(12,6))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
     ode.plot_soln(ax=ax1,angle=10)
     for i in range(3):
@@ -253,4 +254,11 @@ if __name__ == '__main__':
     g.map_upper(sns.scatterplot, size=5)
     g.map_lower(sns.kdeplot)
     g.map_diag(sns.kdeplot)
+    for ax in g.axes.flatten():
+        # rotate x axis labels
+        # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+        # rotate y axis labels
+        ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+        # set y labels alignment
+        ax.yaxis.get_label().set_horizontalalignment('right')
     g.savefig(os.path.join(os.getcwd(),'properties/long_traj.png'),bbox_inches='tight')

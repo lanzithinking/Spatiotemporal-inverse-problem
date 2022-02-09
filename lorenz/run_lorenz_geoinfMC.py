@@ -31,8 +31,8 @@ def main(seed=2021):
 
     ## define Lorenz63 inverse problem ##
     num_traj = 1
-    t_init = 1000
-    t_final = 1100
+    t_init = 100
+    t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = 'aug' # True; 'aug'; False
