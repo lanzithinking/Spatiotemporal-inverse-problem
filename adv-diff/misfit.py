@@ -123,7 +123,7 @@ class SpaceTimePointwiseStateObservation(Misfit):
             print(e)
             pde=kwargs.pop('pde',None)
             nref=kwargs.pop('nref',0)
-            init=kwargs.pop('pde',None)
+            init=kwargs.pop('init',None)
             # pde for observations
             if pde is None:
                 mesh = self.Vh.mesh()

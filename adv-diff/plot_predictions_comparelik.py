@@ -305,21 +305,21 @@ plt.rcParams['image.cmap'] = 'jet'
 # num_rows=2
 # fig,axes = plt.subplots(nrows=num_rows,ncols=2,sharex=False,sharey=False,figsize=(9,8))
 num_rows=1
-fig,axes = plt.subplots(nrows=num_rows,ncols=3,sharex=False,sharey=False,figsize=(14,4))
+fig,axes = plt.subplots(nrows=num_rows,ncols=3,sharex=False,sharey=False,figsize=(18,5))
 locs=[16,26]
 j=2;
 for i,ax in enumerate(axes.flat):
+    plt.axes(axes.flat[i])
     if i==0:
-        plt.axes(axes.flat[i])
     #     df.plot(adif_pred.misfit.Vh.mesh())
     #     ax.scatter(adif_pred.misfit.targets[slab_idx,0],adif_pred.misfit.targets[slab_idx,1])
         cred_cover = np.mean(np.logical_and(pred_m[0][j]-1.96*pred_std[0][j] < true_trj.T, true_trj.T < pred_m[0][j]+1.96*pred_std[0][j]),axis=0)
         ax.plot(adif_pred.misfit.observation_times,cred_cover,linestyle='--')
         cred_cover = np.mean(np.logical_and(pred_m[1][j]-1.96*pred_std[1][j] < true_trj.T, true_trj.T < pred_m[1][j]+1.96*pred_std[1][j]),axis=0)
         ax.plot(adif_pred.misfit.observation_times,cred_cover,linestyle='-.')
-        ax.set_xlabel('t')
-        ax.set_title('truth covering rate of credible bands')
-        plt.legend(['simple likelihood','spatiotemporal likelihood'],frameon=False)
+        ax.set_xlabel('t', fontsize=16)
+        ax.set_title('truth covering rate of credible bands',fontsize=16)
+        plt.legend(['static model','STGP model'],frameon=False, fontsize=15)
     # elif i==1:
     #     ax.plot(adif_pred.misfit.observation_times,np.zeros(len(adif_pred.misfit.observation_times)),color='red',linewidth=1.5)
     #     ax.plot(adif_pred.misfit.observation_times,err_m[0][j],linestyle='--')
@@ -335,13 +335,14 @@ for i,ax in enumerate(axes.flat):
         ax.fill_between(adif_pred.misfit.observation_times,pred_m[0][j][k]-1.96*pred_std[0][j][k],pred_m[0][j][k]+1.96*pred_std[0][j][k],color='b',alpha=.1)
         ax.plot(adif_pred.misfit.observation_times,pred_m[1][j][k],linestyle='-.')
         ax.fill_between(adif_pred.misfit.observation_times,pred_m[1][j][k]-1.96*pred_std[1][j][k],pred_m[1][j][k]+1.96*pred_std[1][j][k],color='y',alpha=.2)
-        ax.set_xlabel('t')
-        ax.set_title('forward prediction (x=%.3f, y=%.3f)'% tuple(adif.misfit.targets[k]))
+        ax.set_xlabel('t', fontsize=16)
+        ax.set_title('forward prediction (x=%.3f, y=%.3f)'% tuple(adif.misfit.targets[k]),fontsize=16)
+        plt.legend(['truth','static model','STGP model'],frameon=False, fontsize=15)
     ax.set_aspect('auto')
     # plt.axis([0, 1, 0, 1])
-plt.subplots_adjust(wspace=0.2, hspace=0.2)
+plt.subplots_adjust(wspace=0.15, hspace=0.1)
 # save plot
 # fig.tight_layout()
-if not os.path.exists(folder+'/predictions'): os.makedirs(folder+'/predictions')
+# if not os.path.exists(folder+'/predictions'): os.makedirs(folder+'/predictions')
 plt.savefig(folder+'/predictions_comparelik.png',bbox_inches='tight')
 # plt.show()

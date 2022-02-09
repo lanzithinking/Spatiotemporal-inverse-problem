@@ -42,7 +42,7 @@ for i,ax in enumerate(axes.flat):
     if i==0:
         # plot truth
         df.plot(vec2fun(true_param,adif.prior.V))
-        ax.set_title('Truth')
+        ax.set_title('Truth',fontsize=18)
     else:
         # plot MAP
         try:
@@ -50,13 +50,14 @@ for i,ax in enumerate(axes.flat):
             # if i==1:
             #     f=df.XDMFFile(adif.mpi_comm, os.path.join('/Users/slan/Projects/BUQae/code/ad_diff/properties','MAP.xdmf'))
             # elif i==2:
-            f=df.XDMFFile(adif.mpi_comm, os.path.join('../../../BUQae/code/ad_diff' if i==1 else os.getcwd(),'properties','MAP.xdmf'))
+            # f=df.XDMFFile(adif.mpi_comm, os.path.join('../../../BUQae/code/ad_diff' if i==1 else os.getcwd(),'properties','MAP.xdmf'))
+            f=df.XDMFFile(adif.mpi_comm, os.path.join(os.getcwd(),'properties','MAP_static.xdmf' if i==1 else 'MAP_static.xdmf'))
             MAP=df.Function(adif.prior.V,name="MAP")
             f.read_checkpoint(MAP,'m',0)
             f.close()
             sub_figs[i]=df.plot(MAP)
             # fig.colorbar(sub_figs[i],ax=ax)
-            ax.set_title('MAP('+{1:'simple',2:'spatiotemporal'}[i]+' likelihood)')
+            ax.set_title('MAP ('+{1:'static',2:'STGP'}[i]+' model)',fontsize=18)
         except Exception as e:
             print(e)
             pass
