@@ -1,5 +1,5 @@
 """
-Main function to run ensemble Kalman (EnK) algorithms for Rossler inverse problem
+Main function to run ensemble Kalman (EnK) algorithms for Chen inverse problem
 Shiwei Lan @ ASU, 2021
 """
 
@@ -8,7 +8,7 @@ import os,argparse,pickle
 import numpy as np
 
 # the inverse problem
-from Rossler import Rossler
+from Chen import Chen
 
 from joblib import Parallel, delayed
 import multiprocessing
@@ -36,41 +36,41 @@ def main(seed=2021):
     # set random seed
     np.random.seed(seed)
 
-    ## define Rossler inverse problem ##
+    ## define Chen inverse problem ##
     num_traj = 1 # only consider single trajectory!
-    prior_params = {'mean':[-1.5, -1.5, 2], 'std':[0.15, 0.15, 0.2]}
-    t_init = 1000
-    t_final = 1100
+    prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]}
+    t_init = 100
+    t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = {'simple':'aug','STlik':False}[args.mdls[args.mdlNO]] # True; 'aug'; False
-    var_out = True # True; 'cov'; False
+    var_out = 'cov' # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
-    rsl = Rossler(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
+    chn = Chen(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
     
     # initialization
-    u0=rsl.prior.sample(n=args.ensemble_size)
-    # G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze() for u_j in u])
+    u0=chn.prior.sample(n=args.ensemble_size)
+    # G=lambda u:np.stack([chn.misfit.observe(sol=chn.ode.solve(params=np.exp(u_j), t=chn.obs_times)).squeeze() for u_j in u])
     if args.ensemble_size>200:
         n_jobs = np.min([10, multiprocessing.cpu_count()])
-        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
-    # y=rsl.misfit.obs[0]
+        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:chn.misfit.observe(sol=chn.ode.solve(params=np.exp(u_j), t=chn.obs_times)).squeeze())(u_j) for u_j in u))
+    # y=chn.misfit.obs[0]
     if STlik:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten() for u_j in u])
+            G=lambda u:np.stack([chn.misfit.observe(sol=chn.ode.solve(params=np.exp(u_j), t=chn.obs_times)).flatten() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten())(u_j) for u_j in u))
-        y=rsl.misfit.obs[0].flatten()
-        nz_cov=rsl.misfit.stgp.tomat()
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:chn.misfit.observe(sol=chn.ode.solve(params=np.exp(u_j), t=chn.obs_times)).flatten())(u_j) for u_j in u))
+        y=chn.misfit.obs[0].flatten()
+        nz_cov=chn.misfit.stgp.tomat()
     else:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze() for u_j in u])
+            G=lambda u:np.stack([chn.misfit.observe(sol=chn.ode.solve(params=np.exp(u_j), t=chn.obs_times)).squeeze() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
-        y=rsl.misfit.obs[0]
-        nz_cov=np.diag(rsl.misfit.nzvar[0]) if np.ndim(rsl.misfit.nzvar)==2 else rsl.misfit.nzvar[0]
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:chn.misfit.observe(sol=chn.ode.solve(params=np.exp(u_j), t=chn.obs_times)).squeeze())(u_j) for u_j in u))
+        y=chn.misfit.obs[0]
+        nz_cov=np.diag(chn.misfit.nzvar[0]) if np.ndim(chn.misfit.nzvar)==2 else chn.misfit.nzvar[0]
     data={'obs':y,'size':y.size,'cov':nz_cov}
-    prior={'mean':rsl.prior.mean,'cov':np.diag(rsl.prior.std)**2,'sample':rsl.prior.sample}
+    prior={'mean':chn.prior.mean,'cov':np.diag(chn.prior.std)**2,'sample':chn.prior.sample}
     
     # EnK parameters
     nz_lvl=1.0
@@ -86,7 +86,7 @@ def main(seed=2021):
     
     # append extra information including the count of solving
     filename_=os.path.join(savepath,filename+'.pckl')
-    filename=os.path.join(savepath,'Rossler_'+{True:'avg',False:'full','aug':'avgaug'}[rsl.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
+    filename=os.path.join(savepath,'Chen_'+{True:'avg',False:'full','aug':'avgaug'}[chn.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
     pickle.dump([obs_times,avg_traj,STlik,var_out,y,args],f)

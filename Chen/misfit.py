@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -73,16 +73,16 @@ class misfit:
                 if self.STlik in (True,'sep'):
                     # -- model 0 -- separable STGP
                     # self.stgp=STGP(spat=self.obs.mean(axis=0).T, temp=self.obs_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
-                    # C_x=GP(self.obs.mean(axis=0).T, l=.3, sigma2=np.diag(np.sqrt(sigma2_)), store_eig=True)
+                    # C_x=GP(self.obs.mean(axis=0).T, l=.3, sigma2=np.diag(np.sqrt(sigma2_)), store_eig=True, jit=1e-2)
                     sigma2=np.ones((self.obs.shape[2],)*2); np.fill_diagonal(sigma2, np.sqrt(sigma2_))
                     C_x=GP(self.obs.mean(axis=0).T, l=.3, sigma2=sigma2, store_eig=True)
-                    C_t=GP(self.obs_times, store_eig=True, l=1.0, sigma2=np.sqrt(sigma2_.sum()), jit=1e-2)#, ker_opt='matern',nu=.5)
+                    C_t=GP(self.obs_times, store_eig=True, l=0.1, sigma2=np.sqrt(sigma2_.sum()), jit=1e-2)#, ker_opt='matern',nu=.5)
                     self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
                     # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.nzvar.mean(axis=0).sum(), store_eig=True)
                 elif self.STlik=='full':
                     # -- model 1 -- full STGP
                     sigma2=np.ones((np.prod(self.obs.shape[1:]),)*2); np.fill_diagonal(sigma2, np.sqrt(np.tile(sigma2_,len(self.obs_times))))
-                    self.stgp=GP(self.obs.mean(axis=0).flatten(), l=.3, sigma2=sigma2, store_eig=True, jit=1e-2)
+                    self.stgp=GP(self.obs.mean(axis=0).flatten(), l=.3, sigma2=sigma2, store_eig=True, jit=1e-3)
                 else:
                     raise NotImplementedError('Model not implemented!')
     
@@ -94,12 +94,29 @@ class misfit:
         var_out=kwargs.pop('var_out','cov') # False, True, or 'cov
         obs_file_name='Chen_obs_'+{True:'avg',False:'full','aug':'avgaug'}[self.avg_traj]+'_traj_'+{True:'nzvar',False:'','cov':'nzcov'}[var_out]+'.pckl'
         use_saved_obs=kwargs.pop('use_saved_obs',True)
-        if use_saved_obs and os.path.exists(os.path.join(obs_file_loc,obs_file_name)):
-            f=open(os.path.join(obs_file_loc,obs_file_name),'rb')
-            obs, nzvar=pickle.load(f)
-            f.close()
-            print('Observation file '+obs_file_name+' has been read!')
-        else:
+        if use_saved_obs:
+            try:
+                f=open(os.path.join(obs_file_loc,obs_file_name),'rb')
+                loaded=pickle.load(f)
+                obs, nzvar=loaded[:2]
+                if len(loaded)==3:
+                    times=loaded[2]
+                    d=abs(self.obs_times-times[:,None])
+                    obs=obs[:,np.argmin(d,axis=0),:]
+                    dt=np.ptp(self.obs_times)/len(self.obs_times)
+                    msk=(np.min(d,axis=0)<dt)
+                    if not np.any(msk):
+                        raise ValueError('No time series found!')
+                    if not np.all(msk):
+                        self.obs_times=self.obs_times[msk]
+                        obs=obs[:,msk,:]
+                        print('Partial time series found!')
+                f.close()
+                print('Observation file '+obs_file_name+' has been read!')
+            except Exception as e:
+                print(e); pass
+                use_saved_obs=False
+        if not use_saved_obs:
             ode=kwargs.pop('ode',self.ode)
             params=kwargs.pop('params',tuple(self.true_params.values()))
             t=self.obs_times
@@ -108,7 +125,9 @@ class misfit:
             save_obs=kwargs.pop('save_obs',True)
             if save_obs:
                 f=open(os.path.join(obs_file_loc,obs_file_name),'wb')
-                pickle.dump([obs, nzvar], f)
+                dump_list=[obs, nzvar]
+                if not self.avg_traj: dump_list.append(self.obs_times)
+                pickle.dump(dump_list, f)
                 f.close()
             print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
         return obs, nzvar
@@ -241,11 +260,11 @@ class misfit:
 if __name__ == '__main__':
     np.random.seed(2021)
     # define misfit
-    num_traj=1; avg_traj=False; var_out='cov'
-    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, var_out=var_out, save_obs=False, STlik=True)
+    num_traj=1; avg_traj='aug'; var_out='cov'
+    mft = misfit(num_traj=num_traj, avg_traj=avg_traj, var_out=var_out, save_obs=False, STlik=False)
     
     # test gradient
-    sol = mft.ode.solve(params=(0.2, 0.2, 5.7), t=mft.obs_times)
+    sol = mft.ode.solve(params=(40.0, 3.0, 28.0), t=mft.obs_times)
     c = mft.cost(sol)
     g = mft.grad(sol, wrt='sol')
     h = 1e-7

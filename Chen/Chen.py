@@ -15,8 +15,8 @@ __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
 -------------------------------------------------------------------------
 --To run demo:                     python Chen.py # to compare with the finite difference method
---To define a class object:  e.g.  rsl=Chen(args)
---To obtain geometric quantities:  loglik,agrad,HessApply,eigs = rsl.get_geom(args) # misfit value, gradient, metric action and eigenpairs of metric resp.
+--To define a class object:  e.g.  chn=Chen(args)
+--To obtain geometric quantities:  loglik,agrad,HessApply,eigs = chn.get_geom(args) # misfit value, gradient, metric action and eigenpairs of metric resp.
                                    which calls _get_misfit, _get_grad, and _get_HessApply resp.
 ---------------------------------------------------------------
 https://github.com/lanzithinking/Spatiotemporal-inverse-problem
@@ -38,9 +38,9 @@ class Chen:
         Initialize the Chen inverse problem consisting of the ODE model, the prior model and the misfit (likelihood) model.
         """
         self.num_traj = num_traj
-        self.ode_params = {'a':0.2, 'b':0.2, 'c':5.7} if ode_params is None else ode_params
-        self.x0 = kwargs.pop('ode_init', -7 + 14 * np.random.RandomState(kwargs.pop('randinit_seed',2021)).random((self.num_traj, 3))) # fixed initial condition
-        self.prior_params = {'mean':[-1.5, -1.5, 2], 'std':[0.15, 0.15, 0.2]} if prior_params is None else prior_params
+        self.ode_params = {'a':40.0, 'b':3.0, 'c':28.0} if ode_params is None else ode_params
+        self.x0 = kwargs.pop('ode_init', -15 + 30 * np.random.RandomState(kwargs.pop('randinit_seed',2021)).random((self.num_traj, 3)))
+        self.prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]} if prior_params is None else prior_params
         if obs_times is None:
             t_init = kwargs.pop('t_init',0.)
             t_final = kwargs.pop('t_final',4.)
@@ -99,8 +99,7 @@ class Chen:
         x = self.x[STATE]
         self.x[ADJOINT] = self.ode.solveAdj(self.x[PARAMETER], self.misfit.obs_times, x, self.misfit, cont_soln=self.cont_soln)
         dt = np.diff(self.misfit.obs_times[:2])
-        grad = np.sum(self.x[ADJOINT]*np.stack([-x[:,:,1], -np.ones(x.shape[:2]), x[:,:,2]], axis=-1), axis=(0,1))
-        grad = np.array([0,grad[0],grad[1]+grad[2]]) *dt * self.x[PARAMETER] # exp transform
+        grad = np.sum(np.stack([-(x[:,:,1]-x[:,:,0])*self.x[ADJOINT][:,:,0], x[:,:,0]*self.x[ADJOINT][:,:,0] - (x[:,:,0]+x[:,:,1])*self.x[ADJOINT][:,:,2], x[:,:,2]*self.x[ADJOINT][:,:,1]], axis=-1), axis=(0,1)) *dt * self.x[PARAMETER] # exp transform
         if not MF_only: grad += self.prior.grad(parameter)
         return grad
 
@@ -198,8 +197,8 @@ class Chen:
         Demo to check results with the adjoint method against the finite difference method.
         """
         # random sample parameter
-        # parameter = self.prior.sample(add_mean=True)
-        parameter = np.log(list(self.misfit.true_params.values())) + .1*np.random.randn(len(self.x[PARAMETER]))
+        parameter = self.prior.sample(add_mean=False)
+        # parameter = np.log(list(self.misfit.true_params.values())) + .1*np.random.randn(len(self.x[PARAMETER]))
         
         # MF_only = True
         import time
@@ -234,22 +233,22 @@ if __name__ == '__main__':
     np.random.seed(seed)
     # define Bayesian inverse problem
     num_traj = 1
-    t_init = 1000
-    t_final = 1100
+    t_init = 100
+    t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = 'aug'
     var_out = 'cov'
-    rsl =Chen(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False)
+    chn = Chen(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False)
     # test
-    rsl.test(1e-8)
+    chn.test(1e-8)
     # obtain MAP
-    map_v = rsl.get_MAP(init='random',SAVE=True)
+    map_v = chn.get_MAP(init='random',SAVE=True)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )
     # compare it with the truth
-    true_param = list(rsl.misfit.true_params.values())
+    true_param = list(chn.misfit.true_params.values())
     relerr = np.linalg.norm(map_v-true_param)/np.linalg.norm(true_param)
     print('Relative error of MAP compared with the truth %.2f%%' % (relerr*100))
-    # report the minimum cost
-    # min_cost = rsl._get_misfit(map_v)
+    # # report the minimum cost
+    # min_cost = chn._get_misfit(map_v)
     # print('Minimum cost: %.4f' % min_cost)

@@ -1,10 +1,10 @@
 #!/bin/bash
  
 #SBATCH -N 1                        # number of compute nodes
-#SBATCH -c 1                        # number of "tasks" (cores)
-#SBATCH --mem=128G                   # GigaBytes of memory required (per node)
+#SBATCH -c 5                        # number of "tasks" (cores)
+#SBATCH --mem=64G                   # GigaBytes of memory required (per node)
 
-#SBATCH -p serial                   # partition 
+#SBATCH -p parallel                   # partition 
 #SBATCH -q normal                   # QOS
 
 #SBATCH -t 2-12:00                  # wall time (D-HH:MM)
@@ -19,7 +19,7 @@
 module load anaconda3/2020.2
 
 # go to working directory
-cd ~/Projects/ST-inverse/code/Rossler
+cd ~/Projects/ST-inverse/code/Chen
 
 # run python script
  if [ $# -eq 0 ]; then
@@ -59,4 +59,4 @@ else
 	exit 0
 fi
 
-python -u run_rossler_EnK_spinavgs.py ${alg_NO} ${mdl_NO} ${ensbl_size} #> ${alg_name}_${mdl_name}_J${ensbl_size}.log
+python -u run_chen_EnK_spinavgs.py ${alg_NO} ${mdl_NO} ${ensbl_size} #> ${alg_name}_${mdl_name}_J${ensbl_size}.log

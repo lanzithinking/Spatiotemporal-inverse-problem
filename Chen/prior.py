@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-The prior of Rossler inverse problem 
+The prior of Chen inverse problem 
 -------------------------------------------------------------------------
 Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 
@@ -20,11 +20,11 @@ import matplotlib.pyplot as plt
 
 class prior:
     """
-    (Log-Normal) prior for parameters in Rossler inverse problem.
+    (Log-Normal) prior for parameters in Chen inverse problem.
     """
-    def __init__(self, mean=[-1.5, -1.5, 2], std=[0.15, 0.15, 0.2]):
+    def __init__(self, mean=[4.0, 1.2, 3.3], std=[0.4, 0.5, 0.15]):
         """
-        mean and standard deviation for logarithms of (sigma, beta, rho)
+        mean and standard deviation for logarithms of (a, b, c)
         """
         self.mean = mean
         self.std = std

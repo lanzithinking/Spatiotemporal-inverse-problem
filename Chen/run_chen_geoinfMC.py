@@ -31,41 +31,41 @@ def main(seed=2021):
 
     ## define Chen inverse problem ##
     num_traj = 1
-    t_init = 1000
-    t_final = 1100
+    ode_params = {'a':40.0, 'b':3.0, 'c':28.0}
+    t_init = 100
+    t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = 'aug' # True; 'aug'; False
-    var_out = True # True; 'cov'; False
-    rsl = Chen(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
+    var_out = 'cov' # True; 'cov'; False
+    chn = Chen(num_traj=num_traj, ode_params=ode_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
     
     # initialization
-    # unknown=rsl.prior.sample(add_mean=True)
-    unknown=np.log([.18, .18, 5.5])
+    unknown=chn.prior.sample(add_mean=False)
     # MAP_file=os.path.join(os.getcwd(),'properties/MAP.pckl')
     # if os.path.isfile(MAP_file):
     #     f=open(MAP_file,'rb')
     #     unknown = pickle.load(f)
     #     f.close()
     # else:
-    #     unknown=rsl.get_MAP(SAVE=True)
+    #     unknown=chn.get_MAP(SAVE=True)
     
     # run MCMC to generate samples
     print("Preparing %s sampler with step size %g for %d step(s)..."
           % (args.algs[args.algNO],args.step_sizes[args.algNO],args.step_nums[args.algNO]))
     
-    inf_GMC=geoinfMC(unknown,rsl,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO])
+    inf_GMC=geoinfMC(unknown,chn,args.step_sizes[args.algNO],args.step_nums[args.algNO],args.algs[args.algNO])
     # # force to update (b, c) only
     inf_GMC.q=unknown[1:]; inf_GMC.dim=2
     geom_ord=[0]
     if any(s in args.algs[args.algNO] for s in ['MALA','HMC']): geom_ord.append(1)
     def geom_(parameter):
-        out = rsl.get_geom(np.insert(parameter,0,np.log(rsl.misfit.true_params['a'])),geom_ord=geom_ord)
+        out = chn.get_geom(np.insert(parameter,0,np.log(chn.misfit.true_params['a'])),geom_ord=geom_ord)
         if 1 in geom_ord: out = (out[0], out[1][1:])
         return out
     inf_GMC.geom=geom_
     inf_GMC.ll, inf_GMC.g = inf_GMC.geom(inf_GMC.q)[:2]
-    rsl.prior.mean=rsl.prior.mean[1:]; rsl.prior.std=rsl.prior.std[1:]; rsl.prior.d=2
+    chn.prior.mean=chn.prior.mean[1:]; chn.prior.std=chn.prior.std[1:]; chn.prior.d=2
     
     mc_fun=inf_GMC.sample
     mc_args=(args.num_samp,args.num_burnin)
@@ -73,10 +73,10 @@ def main(seed=2021):
     
     # append ODE information including the count of solving
     filename_=os.path.join(inf_GMC.savepath,inf_GMC.filename+'.pckl')
-    filename=os.path.join(inf_GMC.savepath,'Chen_'+{True:'avg',False:'full','aug':'avgaug'}[rsl.misfit.avg_traj]+'_'+inf_GMC.filename+'.pckl') # change filename
+    filename=os.path.join(inf_GMC.savepath,'Chen_'+{True:'avg',False:'full','aug':'avgaug'}[chn.misfit.avg_traj]+'_'+inf_GMC.filename+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
-    soln_count=rsl.ode.soln_count
+    soln_count=chn.ode.soln_count
     pickle.dump([num_traj,obs_times,avg_traj,soln_count,args],f)
     f.close()
 #     # verify with load

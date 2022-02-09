@@ -6,10 +6,10 @@ The Chen system of differential equations
 -------------------------------------------------------------------------
 Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 
-__author__ = "Mirjeta Pasha"
+__author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.2"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -22,11 +22,11 @@ import matplotlib.pyplot as plt
 class chen:
     """
     Chen ordinary differential equations
-    dx_1/dt = a(x_2 - x_3)
-    dx_2/dt = (c-a)x_1 - x_1 x_3 + cx_2
-    dx_3/dt = x_1 x_2 - b x_3
+    dx_1/dt = a (x_2 - x_1)
+    dx_2/dt = (c-a) x_1 - x_1x_3 + c x_2
+    dx_3/dt = x_1x_2 - b x_3
     """
-    def __init__(self, x0=None, t=None, a=40, b=3, c=28, **kwargs):
+    def __init__(self, x0=None, t=None, a=40.0, b=3.0, c=28.0, **kwargs):
         """
         x0: initial state
         t: time points to solve the dynmics at
@@ -35,7 +35,7 @@ class chen:
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
             rng = np.random.RandomState(kwargs.get('randinit_seed')) if 'randinit_seed' in kwargs else np.random
-            self.x0 = -7 + 14 * rng.random((self.num_traj, 3))
+            self.x0 = np.array([-0.1,0.5,-0.6]) -.1 + .2 * rng.random((self.num_traj, 3))
         else:
             self.x0 = x0
             self.num_traj = x0.shape[0] if np.ndim(x0)>1 else 1
@@ -58,7 +58,7 @@ class chen:
         """
         Time derivative of Chen dynamics
         """
-        return [a*(x[1] - x[2]), (c-a)*x[0] - x[0]*x[2] + c*x[1], x[0]*x[1]-b*x[2]]
+        return [a * (x[1]-x[0]), (c - a) * x[0] - x[0] * x[2] + c * x[1], x[0] * x[1] - b * x[2]]
     
     def solveFwd(self, params=None, t=None):
         """
@@ -84,9 +84,9 @@ class chen:
         """
         x = x_f(t)
         g = g_f(t)
-        return [ lmd[1] + lmd[2] - g[0], 
-                -lmd[0] - a * lmd[1] - g[1], 
-                -lmd[0]*x[2] - lmd[2]*(x[0] - c) - g[2]]
+        return [a * (lmd[1]-lmd[0]) - g[0], 
+                lmd[0]*(c - a - x[2]) + c * lmd[1] - lmd[2]*x[0] - g[1], 
+                lmd[0]*x[1] + lmd[1]*x[0] - b * lmd[2] - g[2]]
     
     def solveAdj(self, params=None, t=None, sol=None, msft=None, **kwargs):
         """
@@ -155,9 +155,9 @@ class chen:
         # ax.axis('off')
         
         # prepare the axes limits
-        ax.set_xlim((-15, 15))
-        ax.set_ylim((-15, 15))
-        ax.set_zlim((-5, 15))
+        ax.set_xlim((-25, 25)); ax.set_xlabel('x')
+        ax.set_ylim((-35, 35)); ax.set_ylabel('y')
+        ax.set_zlim((5, 55)); ax.set_zlabel('z')
         
         # choose a different color for each trajectory
         colors = plt.cm.jet(np.linspace(0, 1, num_traj))
@@ -177,12 +177,13 @@ if __name__ == '__main__':
     import os
     import pandas as pd
     import seaborn as sns
+    sns.set(font_scale=1.1)
     
     #### -- demonstration -- ####
     num_traj = 10
-    ode = chen(num_traj=num_traj,max_time=5,time_res=100)
+    ode = chen(num_traj=num_traj,max_time=5,time_res=1000)
     x_t = ode.solve()
-    fig = plt.figure(figsize=(12,5))
+    fig = plt.figure(figsize=(12,6))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
     ode.plot_soln(ax=ax1,angle=10)
     for i in range(3):
@@ -199,8 +200,8 @@ if __name__ == '__main__':
     
     #### -- multiple short trajectories -- ####
     # define the Chen ODE
-    num_traj = 50
-    ode_multrj = chen(num_traj=num_traj,max_time=5,time_res=100)
+    num_traj = 5000
+    ode_multrj = chen(num_traj=num_traj,max_time=5,time_res=10000)
     # generate n trajectories
     xt_multrj = ode_multrj.solve()
     # ode_multrj.plot_soln()
@@ -253,4 +254,11 @@ if __name__ == '__main__':
     g.map_upper(sns.scatterplot, size=5)
     g.map_lower(sns.kdeplot)
     g.map_diag(sns.kdeplot)
+    for ax in g.axes.flatten():
+        # rotate x axis labels
+        # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+        # rotate y axis labels
+        ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+        # set y labels alignment
+        ax.yaxis.get_label().set_horizontalalignment('right')
     g.savefig(os.path.join(os.getcwd(),'properties/long_traj.png'),bbox_inches='tight')
