@@ -155,9 +155,9 @@ class rossler:
         # ax.axis('off')
         
         # prepare the axes limits
-        ax.set_xlim((-15, 15))
-        ax.set_ylim((-15, 15))
-        ax.set_zlim((-5, 15))
+        ax.set_xlim((-10, 10)); ax.set_xlabel('x')
+        ax.set_ylim((-10, 10)); ax.set_ylabel('y')
+        ax.set_zlim((-5, 10)); ax.set_zlabel('z')
         
         # choose a different color for each trajectory
         colors = plt.cm.jet(np.linspace(0, 1, num_traj))
@@ -173,16 +173,17 @@ class rossler:
         return ax
 
 if __name__ == '__main__':
-    np.random.seed(2021)
+    np.random.seed(2022)
     import os
     import pandas as pd
     import seaborn as sns
+    sns.set(font_scale=1.1)
     
     #### -- demonstration -- ####
     num_traj = 10
     ode = rossler(num_traj=num_traj,max_time=5,time_res=1000)
     x_t = ode.solve()
-    fig = plt.figure(figsize=(12,5))
+    fig = plt.figure(figsize=(12,6))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
     ode.plot_soln(ax=ax1,angle=10)
     for i in range(3):
@@ -197,31 +198,31 @@ if __name__ == '__main__':
             ax2_i.set_xlabel('t')
     plt.savefig(os.path.join(os.getcwd(),'properties/multi_traj.png'),bbox_inches='tight')
     
-    #### -- multiple short trajectories -- ####
-    # define the Rossler ODE
-    num_traj = 5000
-    ode_multrj = rossler(num_traj=num_traj,max_time=5,time_res=10000)
-    # generate n trajectories
-    xt_multrj = ode_multrj.solve()
-    # ode_multrj.plot_soln()
-    # plt.show()
-    # average trajectory
-    xt_multrj_avg = xt_multrj.mean(axis=1)
-    print("The mean of time-averages for {:d} short trajectories is: ".format(num_traj))
-    print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
-    # plot
-    # fig,axes = plt.subplots(nrows=1,ncols=3,sharex=False,sharey=True,figsize=(16,4))
-    # for i, ax in enumerate(axes.flat):
-    #     plt.axes(ax)
-    #     plt.hist(xt_multrj_avg[:,i])
-    #     plt.title('Average $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
-    # plt.show()
-    xts_avg = pd.DataFrame(xt_multrj_avg,columns=['x_avg','y_avg','z_avg'])
-    g = sns.PairGrid(xts_avg, diag_sharey=False, size=3)
-    g.map_upper(sns.scatterplot, size=5)
-    g.map_lower(sns.kdeplot)
-    g.map_diag(sns.kdeplot)
-    g.savefig(os.path.join(os.getcwd(),'properties/multi_traj_avg.png'),bbox_inches='tight')
+    # #### -- multiple short trajectories -- ####
+    # # define the Rossler ODE
+    # num_traj = 5000
+    # ode_multrj = rossler(num_traj=num_traj,max_time=5,time_res=10000)
+    # # generate n trajectories
+    # xt_multrj = ode_multrj.solve()
+    # # ode_multrj.plot_soln()
+    # # plt.show()
+    # # average trajectory
+    # xt_multrj_avg = xt_multrj.mean(axis=1)
+    # print("The mean of time-averages for {:d} short trajectories is: ".format(num_traj))
+    # print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
+    # # plot
+    # # fig,axes = plt.subplots(nrows=1,ncols=3,sharex=False,sharey=True,figsize=(16,4))
+    # # for i, ax in enumerate(axes.flat):
+    # #     plt.axes(ax)
+    # #     plt.hist(xt_multrj_avg[:,i])
+    # #     plt.title('Average $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
+    # # plt.show()
+    # xts_avg = pd.DataFrame(xt_multrj_avg,columns=['x_avg','y_avg','z_avg'])
+    # g = sns.PairGrid(xts_avg, diag_sharey=False, size=3)
+    # g.map_upper(sns.scatterplot, size=5)
+    # g.map_lower(sns.kdeplot)
+    # g.map_diag(sns.kdeplot)
+    # g.savefig(os.path.join(os.getcwd(),'properties/multi_traj_avg.png'),bbox_inches='tight')
     
     #### -- one long trajectories -- ####
     # define the Rossler ODE
@@ -253,4 +254,11 @@ if __name__ == '__main__':
     g.map_upper(sns.scatterplot, size=5)
     g.map_lower(sns.kdeplot)
     g.map_diag(sns.kdeplot)
+    for ax in g.axes.flatten():
+        # rotate x axis labels
+        # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+        # rotate y axis labels
+        ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+        # set y labels alignment
+        ax.yaxis.get_label().set_horizontalalignment('right')
     g.savefig(os.path.join(os.getcwd(),'properties/long_traj.png'),bbox_inches='tight')
