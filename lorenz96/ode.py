@@ -158,6 +158,7 @@ class lorenz96:
         
     
     def test_ghost_cells(self,):
+        #only for testing
         pad = [2, 1]
         x = np.arange(20).reshape((4, 5))
         y = self.ghost_cells(x, pad)
@@ -167,7 +168,7 @@ class lorenz96:
         
         
     def test_flatten_unflatten(self,):
-    
+        #only for testing
         K, L = 36, 10
         x = np.random.rand(36)
         y = np.random.rand(36*10)
@@ -176,12 +177,6 @@ class lorenz96:
         np.testing.assert_array_equal(x, ans[0])
         np.testing.assert_array_equal(y, ans[1])
         
-    def _dx(self, t, x, a, b, c):
-        """
-        Time derivative of Rossler dynamics
-        """
-        return [- x[1] - x[2], x[0] + a * x[1], b + (x[0]-c) * x[2]]
-    
     
     def plot_soln(self, x_t=None, **kwargs):
         """
@@ -222,34 +217,38 @@ if __name__ == '__main__':
     import os
     import pandas as pd
     import seaborn as sns
-    
+    from mpl_toolkits.mplot3d import Axes3D
     #### -- demonstration -- ####
-    num_traj = 1
-    t = np.linspace(0, 10, 200)
+    num_traj = 10
+    t = np.linspace(0, 10, 100)
     L, K = 10, 36
     n = (L+1) * K
+    x_t = np.zeros((num_traj,100,2*K))
+    for i in range(num_traj):
+        x0 = np.random.randn(num_traj,n)
+        
+        ode = lorenz96(x0=x0, t=t, L=L, K=K)
+        xts, yts = ode.solve()
+        yts=yts.mean(axis=2)
+        x_t[i] = np.hstack((xts,yts))
+        
     
-    x0 = np.random.randn(num_traj,n)
-    
-    ode = lorenz96(x0=x0, t=t, L=L, K=K)
-    xts, yts = ode.solve()
-    
-    '''
-    fig = plt.figure(figsize=(12,5))
+    fig = plt.figure(figsize=(12,6))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
-    ode.plot_soln(ax=ax1,angle=10)
+    #ode.plot_soln(ax=ax1,angle=10)
     for i in range(3):
         if i==0:
             ax2_i = fig.add_subplot(3,2,(i+1)*2)
         else:
             ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
-        ax2_i.plot(ode.t, x_t[:,:,i].T)
+        ax2_i.plot(ode.t, x_t[:,:,i+36].T)
         # ax2_i.set_title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
         ax2_i.set_ylabel({0:'x',1:'y',2:'z'}[i], rotation='horizontal')
         if i==2:
             ax2_i.set_xlabel('t')
     plt.savefig(os.path.join(os.getcwd(),'properties/multi_traj.png'),bbox_inches='tight')
-    
+                             
+    '''
     
    
     xts_avg = pd.DataFrame(xt_multrj_avg,columns=['x_avg','y_avg','z_avg'])

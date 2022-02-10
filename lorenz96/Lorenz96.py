@@ -99,17 +99,17 @@ if __name__ == '__main__':
     num_traj = 1
     t_init = 0
     t_final = 10
-    time_res = 200
+    time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    L, K = 2, 2
+    L, K = 10, 36
     n = (L+1) * K
     x0 = np.random.randn(num_traj, n)
-    avg_traj = True
+    avg_traj = False#True
     var_out = True#'cov'    
-    STlik = False
+    STlik = True
     
-    rsl96 = Lorenz96(ode_init=x0, obs_times=obs_times, L=L, K=K, avg_traj=avg_traj, var_out=var_out, seed=2021, STlik=STlik)
-    xts, yts = rsl96.ode.solve()
+    lrz96 = Lorenz96(ode_init=x0, obs_times=obs_times, L=L, K=K, avg_traj=avg_traj, var_out=var_out, seed=2021, STlik=STlik)
+    xts, yts = lrz96.ode.solve()
     
     
     
