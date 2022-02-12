@@ -41,7 +41,7 @@ for m in range(num_mdls):
                 # record the rems
                 num_read=0
                 for f_i in npz_files:
-                    if np.all([k in f_i for k in ('_'+algs[i]+'_ensbl'+str(ensbl_sz), clbl_j)]):
+                    if np.all([k in f_i for k in ('_'+algs[i]+'_ensbl'+str(ensbl_sz)+'_', clbl_j)]):
                         try:
                             loaded=np.load(os.path.join(fld_mc,f_i))
                             u_est=loaded['arr_0']; err=loaded['arr_1']

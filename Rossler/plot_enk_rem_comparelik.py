@@ -37,7 +37,7 @@ for m in range(num_mdls):
             # record the errors
             num_read=0
             for f_i in pckl_files:
-                if '_'+algs[i]+'_ensbl'+str(ensbl_szs[j]) in f_i:
+                if '_'+algs[i]+'_ensbl'+str(ensbl_szs[j])+'_' in f_i:
                     try:
                         f=open(os.path.join(fld_m,f_i),'rb')
                         f_read=pickle.load(f)
