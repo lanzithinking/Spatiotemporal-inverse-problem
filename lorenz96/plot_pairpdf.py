@@ -63,7 +63,7 @@ if __name__=='__main__':
     t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    L, K = 10, 36
+    L, K = 10, 3
     n = (L+1) * K
     avg_traj = False# True; False
     var_out = True #'cov' ; False   

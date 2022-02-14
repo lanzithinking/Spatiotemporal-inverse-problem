@@ -59,7 +59,7 @@ class misfit:
         self.avg_traj = kwargs.pop('avg_traj',True) # False, True, or 'aug'
         # get observations
         self.obs, self.nzvar = self.get_obs(**kwargs)
-        
+        print(self.obs.shape)
         self.STlik = kwargs.pop('STlik',False)
         if self.STlik:
             if self.avg_traj:
@@ -74,8 +74,15 @@ class misfit:
                     # -- model 0 -- separable STGP
                     # self.stgp=STGP(spat=self.obs.mean(axis=0).T, temp=self.obs_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
                     # C_x=GP(self.obs.mean(axis=0).T, l=.3, sigma2=np.diag(np.sqrt(sigma2_)), store_eig=True)
+                    l_=[.1, 1e-2, 1e-2, 1e-3, 1e-4]*self.ode.K
+                    self.l = np.zeros(int(5*self.ode.K*(5*self.ode.K-1)/2))
+                    k = 0
+                    for i in range(5*self.ode.K-1):
+                        for j in range(i+1,5*self.ode.K):
+                            self.l[k] = np.sqrt(l_[i]*l_[j])
+                            k+=1
                     sigma2=np.ones((self.obs.shape[1],)*2); np.fill_diagonal(sigma2, np.sqrt(sigma2_))
-                    C_x=GP(self.obs.T, l=.3, sigma2=sigma2, store_eig=True)
+                    C_x=GP(self.obs.T, l=self.l, sigma2=sigma2, store_eig=True)
                     C_t=GP(self.obs_times, store_eig=True, l=1.0, sigma2=np.sqrt(sigma2_.sum()), jit=1e-2)#, ker_opt='matern',nu=.5)
                     self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
                     # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.nzvar.mean(axis=0).sum(), store_eig=True)
@@ -191,7 +198,6 @@ class misfit:
     
 
 if __name__ == '__main__':
-            
             
     np.random.seed(2021)
     num_traj = 1

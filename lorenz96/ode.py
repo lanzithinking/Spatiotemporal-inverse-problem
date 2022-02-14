@@ -129,7 +129,7 @@ class lorenz96:
         
         for j in range(1, dy.shape[0]-2):
             k = (j - npad) // L
-            dy[j] = -b * y[j+1] * (y[j+2] - y[j-1]) - y[j] + h / L * x[k]
+            dy[j] = (-b * y[j+1] * (y[j+2] - y[j-1]) - y[j] + h / L * x[k])#np.exp(logc)*
         
         dy = dy[pad[0]:-pad[1]]
         return dy
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     #### -- demonstration -- ####
     num_traj = 10
     t = np.linspace(0, 10, 100)
-    L, K = 10, 36
+    L, K = 10, 2
     n = (L+1) * K
     x_t = np.zeros((num_traj,100,2*K))
     for i in range(num_traj):
@@ -236,12 +236,12 @@ if __name__ == '__main__':
     fig = plt.figure(figsize=(12,6))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
     #ode.plot_soln(ax=ax1,angle=10)
-    for i in range(3):
+    for i in range(min(K,3)):
         if i==0:
             ax2_i = fig.add_subplot(3,2,(i+1)*2)
         else:
             ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
-        ax2_i.plot(ode.t, x_t[:,:,i+36].T)
+        ax2_i.plot(ode.t, x_t[:,:,i+2].T)
         # ax2_i.set_title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
         ax2_i.set_ylabel({0:'x',1:'y',2:'z'}[i], rotation='horizontal')
         if i==2:
