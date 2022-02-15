@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-The Rossler system of differential equations
+The Lorenz96 system of differential equations
 -------------------------------------------------------------------------
 Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 
@@ -21,10 +21,9 @@ import matplotlib.pyplot as plt
 
 class lorenz96:
     """
-    Rossler ordinary differential equations
-    dx_1/dt = - x_2 - x_3
-    dx_2/dt = x_1 + a x_2
-    dx_3/dt = b + (x_1 - c) x_3
+    Lorenz96 ordinary differential equations
+    dx_k/dt = - x_{k-1}*(x_{k-2} - x_{k+1}) - x_k + F - h*c*y_kbar
+    1/c*dy_lk/dt = -b*y_{l+1,k}*(y_{l+12,k} - y_{l-1,k}) - y_lk + h/L*x_kbar
     """
     def __init__(self, x0=None, t=None, h=1, F=10, logc=np.log(10), b=10, L=10, K=36, **kwargs):
         """
@@ -78,7 +77,7 @@ class lorenz96:
     
     def solve(self, params=None, t=None, opt='fwd', **kwargs):
         """
-        Solve Rossler dynamics
+        Solve lorenz96 dynamics
         """
         if params is None:
             params = (self.h, self.F, self.logc, self.b)
@@ -241,7 +240,7 @@ if __name__ == '__main__':
             ax2_i = fig.add_subplot(3,2,(i+1)*2)
         else:
             ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
-        ax2_i.plot(ode.t, x_t[:,:,i+2].T)
+        ax2_i.plot(ode.t, x_t[:,:,i+K].T) #i+K for first 3 y_k, x_t[:,:,i] for first 3 x_k
         # ax2_i.set_title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
         ax2_i.set_ylabel({0:'x',1:'y',2:'z'}[i], rotation='horizontal')
         if i==2:

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 '''
-The misfit of Rossler inverse problem 
+The misfit of Lorenz96 inverse problem 
 -------------------------------------------------------------------------
 Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 
@@ -144,9 +144,9 @@ class misfit:
         # if var_out: nzvar = sol.var(axis=1)
         
         if self.avg_traj:
-            obsf = obs.mean(axis=0) # (K, 5)/(K*5)
+            obsf = obs.mean(axis=0) # (K*5)
         else:
-            obsf = obs # (time_res, K, 5)/(time_res, K*5)
+            obsf = obs # (time_res, K*5)
         if var_out:
             nzvar = []
             for i in range(num_traj):                
@@ -202,7 +202,7 @@ if __name__ == '__main__':
     np.random.seed(2021)
     num_traj = 1
     t = np.linspace(0, 10, 200)
-    L, K = 2, 2
+    L, K = 10, 2
     n = (L+1) * K 
     x0 = np.random.randn(num_traj,n)
     
