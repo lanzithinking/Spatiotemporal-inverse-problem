@@ -43,7 +43,7 @@ class prior:
         gradient of negative log-prior
         """
         dx = x - self.mean
-        g = dx/self.std
+        g = dx/self.std**2
         return g
     
     def sample(self, n=1, add_mean=True):
@@ -63,8 +63,8 @@ class prior:
         if add_mean:
             u -= self.mean
         
-        gradpri = -u/self.std
-        logpri = -.5* np.sum(gradpri**2)
+        gradpri = -u/self.std**2
+        logpri = -.5* np.sum(-u*gradpri)
         if grad:
             return logpri, gradpri
         else:
