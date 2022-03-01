@@ -166,10 +166,10 @@ class misfit:
                     solxt_i = np.hstack([sol[i],sol[i]**2,xsol_i])
                 else:
                     solxt_i = sol[i]
-            if var_out=='cov':
-                nzvar.append(np.cov(solxt_i, rowvar=False))
-            else:
-                nzvar.append(solxt_i.var(axis=0))
+                if var_out=='cov':
+                    nzvar.append(np.cov(solxt_i, rowvar=False))
+                else:
+                    nzvar.append(solxt_i.var(axis=0))
             nzvar = np.array(nzvar)
         return (obs, nzvar) if var_out else obs
     
