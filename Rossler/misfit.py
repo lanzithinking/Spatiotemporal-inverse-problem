@@ -191,8 +191,8 @@ class misfit:
             if np.ndim(self.nzvar)==3:
                 res = np.sum(dif_obs*np.linalg.solve(self.nzvar,dif_obs))/2
             elif np.ndim(self.nzvar)==2:
-                if np.ndim(dif_obs)==3: self.nzvar = self.nzvar[:,:,None]
-                res = np.sum(dif_obs**2/self.nzvar)/2
+                nzvar = self.nzvar[:,:,None] if np.ndim(dif_obs)==3 else self.nzvar
+                res = np.sum(dif_obs**2/nzvar)/2
         return res
         
     def grad(self, sol=None, obs=None, wrt='obs'):
