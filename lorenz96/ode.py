@@ -19,25 +19,26 @@ import numpy as np
 from scipy import integrate, interpolate
 import matplotlib.pyplot as plt
 
-class lorenz96:
+class lrz96:
     """
     Lorenz96 ordinary differential equations
-    dx_k/dt = - x_{k-1}*(x_{k-2} - x_{k+1}) - x_k + F - h*c*y_kbar
-    1/c*dy_lk/dt = -b*y_{l+1,k}*(y_{l+12,k} - y_{l-1,k}) - y_lk + h/L*x_kbar
+    dx_k/dt = - x_{k-1}*(x_{k-2} - x_{k+1}) - x_k + F - h*c*\bar{y}_k
+    1/c*dy_lk/dt = -b*y_{l+1,k}*(y_{l+2,k} - y_{l-1,k}) - y_lk + h/L*x_k
     """
-    def __init__(self, x0=None, t=None, h=1, F=10, logc=np.log(10), b=10, L=10, K=36, **kwargs):
+    def __init__(self, x0=None, t=None, K=36, L=10, h=1, F=10, logc=np.log(10), b=10, **kwargs):
         """
         x0: initial state
         t: time points to solve the dynmics at
         (h, F, logc, b): parameters
         """
-        self.L = L
         self.K = K
-        self.n = (self.L+1)*self.K
+        self.L = L
+        self.dim = self.K*(1+self.L)
         if x0 is None:
             self.num_traj = kwargs.get('num_traj',1)
             rng = np.random.RandomState(kwargs.get('randinit_seed')) if 'randinit_seed' in kwargs else np.random
-            self.x0 = rng.random((self.num_traj, self.n))
+            self.x0 = -1 +  2*rng.random((self.num_traj, self.dim))
+            self.x0[:,:self.K] *= 10
         else:
             self.x0 = x0
             self.num_traj = x0.shape[0] if np.ndim(x0)>1 else 1
@@ -52,28 +53,51 @@ class lorenz96:
         self.logc = logc
         self.b = b
         
-        # count PDE solving times
+        # count ODE solving times
         self.soln_count = np.zeros(4)
         # 0-3: number of solving (forward,adjoint,2ndforward,2ndadjoint) equations respectively
     
+    # def _dx(self, x, t, h, F, logc, b):
+    def _dx(self, t, x, h, F, logc, b):
+        """
+        Time derivative of Lorenz96 dynamics
+        """
+        c = np.exp(logc)
+        X = x[:self.K]; Y = x[self.K:].reshape((self.L, self.K))
+        dX = -np.roll(X,1)*(np.roll(X,2)-np.roll(X,-1)) -X + F - h*c*Y.mean(axis=0)
+        Y_flatF = Y.flatten('F')
+        dY = c*( -b*np.reshape(np.roll(Y_flatF,-1)*(np.roll(Y_flatF,-2)-np.roll(Y_flatF,1)),(self.L,self.K),'F') -Y + h/self.L * X[None,:] ) # (L,K)
+        return np.append(dX,dY.flatten())
     
     def solveFwd(self, params=None, t=None):
         """
         Solve the forward equation
         """
         if params is None:
-            params = (self.h, self.F, self.logc, self.b)
+            params = (self.sigma, self.beta, self.rho)
         elif type(params) is not tuple:
             params = tuple(params)
         if t is None:
             t = self.t
-        sol = [integrate.odeint(self.lorenz_96_slow_fast, x0i, t, args=params) for x0i in self.x0]
-        #xts:(time_res, K), yts:(time_res, K, L)
-        xts, yts= [self.unflatten_time_series(soli ) for soli in sol][0]
-                #cont_soln = [sol_i.sol for sol_i in sol]
+        # x_t = np.asarray([integrate.odeint(self._dx, x0i, t, args=params, tfirst=True) for x0i in self.x0]) # (num_traj, time_res, K(1+L))
+        sol = [integrate.solve_ivp(self._dx, (min(t),max(t)), x0i, t_eval=t, args=params, dense_output=True,) for x0i in self.x0]
+        x_t = np.asarray([sol_i.y.T for sol_i in sol]) # (num_traj, time_res, K(1+L))
+        cont_soln = [sol_i.sol for sol_i in sol]
         self.soln_count[0] += 1
-        return xts,yts #cont_soln
+        return x_t, cont_soln
     
+    # def _dlmd(self, lmd, t, h, F, logc, b, x_f, g_f):
+    def _dlmd(self, t, lmd, h, F, logc, b, x_f, g_f):
+        """
+        Time derivative of adjoint equation
+        """
+        raise NotImplementedError('The derivative of adjoint equation is not implemented.')
+    
+    def solveAdj(self, params=None, t=None, sol=None, msft=None, **kwargs):
+        """
+        Solve the adjoint equation
+        """
+        raise NotImplementedError('The adjoint solver is not implemented.')
     
     def solve(self, params=None, t=None, opt='fwd', **kwargs):
         """
@@ -84,107 +108,22 @@ class lorenz96:
         if t is None:
             t = self.t
         if opt == 'fwd':
-            out = self.solveFwd(params, t) # xts:(time_res, K), yts:(time_res, K, L)
+            out = self.solveFwd(params, t)[0] # (num_traj, time_res, K(1+L))
         elif opt == 'adj':
             out = self.solveAdj(params, t, **kwargs)
         else:
             out = None
         return out
     
-    
-    def index(self, x, i):
-        return np.roll(x, -i, axis=-1)
-    
-    def ghost_cells(self, x, pad):
-        pads = [(0,0)]*(x.ndim - 1) + [pad]
-        return np.pad(x, pads, 'wrap')
-    
-    
-    def remove_ghost_cells(self, x, pad, axis=-1):
-        n = x.shape[axis]
-        a, b = pad
-        inds = np.r_[a:n-b]
-        return x.take(inds, axis=axis)
-    
-    
-    def x_src(self, x, y, h=1, F=10, logc=np.log(10), L=10, **_):
-        # x source terms
-        pad = [2,2]
-        x = self.ghost_cells(x, pad)
-        yb = y.reshape((-1, L)).mean(axis=-1)
-        yg = self.ghost_cells(yb, pad)
-    
-        dx = np.empty_like(x)
-        for k in range(2, dx.shape[0]-1):
-            dx[k] = -x[k-1] * (x[k-2] - x[k+1]) - x[k] + F - h*np.exp(logc)* yg[k]
-        return self.remove_ghost_cells(dx, pad)
-    
-    def y_src(self, x, y, h=1, b=10, L=10, **_):
-        pad = [2, 2]
-    
-        npad = 2
-        y = np.pad(y, npad, mode='wrap')
-        dy = np.empty_like(y)
-        
-        for j in range(1, dy.shape[0]-2):
-            k = (j - npad) // L
-            dy[j] = (-b * y[j+1] * (y[j+2] - y[j-1]) - y[j] + h / L * x[k])#np.exp(logc)*
-        
-        dy = dy[pad[0]:-pad[1]]
-        return dy
-    
-    
-    def flatten_state(self, x, y):
-        return np.concatenate([x, y])
-    
-    
-    def unflatten_state(self, x, K):
-        x, y = x[:K], x[K:]
-        return x, y
-    
-    def unflatten_time_series(self, x):
-        x, y = x[:,:self.K], x[:,self.K:]
-        y = y.reshape((-1, self.K, self.L))
-        return x, y
-    
-    
-    def lorenz_96_slow_fast(self, x, t, h, F, logc, b, **kwargs):
-        
-        x, y = self.unflatten_state(x, self.K)
-        dx = self.x_src(x, y, h, F, logc, self.L, **kwargs)
-        dy = self.y_src(x, y, h, b, self.L, **kwargs)
-        return self.flatten_state(dx, dy)
-        
-    
-    def test_ghost_cells(self,):
-        #only for testing
-        pad = [2, 1]
-        x = np.arange(20).reshape((4, 5))
-        y = self.ghost_cells(x, pad)
-        assert y.shape == (4, 2 +1 + 5)
-        
-        np.testing.assert_array_equal(self.remove_ghost_cells(y, pad), x)
-        
-        
-    def test_flatten_unflatten(self,):
-        #only for testing
-        K, L = 36, 10
-        x = np.random.rand(36)
-        y = np.random.rand(36*10)
-        
-        ans = self.unflatten_state(self.flatten_state(x, y), K)
-        np.testing.assert_array_equal(x, ans[0])
-        np.testing.assert_array_equal(y, ans[1])
-        
-    
     def plot_soln(self, x_t=None, **kwargs):
         """
         Plot the solution
-        need to be modified
         """
         if x_t is None:
             x_t = self.solve()
         num_traj = x_t.shape[0]
+        X_t = x_t[:,:,:self.K]
+        Y_t = x_t[:,:,self.K:].reshape((self.num_traj,-1,self.L,self.K))
         
         if 'ax' in kwargs:
             ax = kwargs.pop('ax')
@@ -194,15 +133,15 @@ class lorenz96:
         # ax.axis('off')
         
         # prepare the axes limits
-        ax.set_xlim((-15, 15))
-        ax.set_ylim((-15, 15))
-        ax.set_zlim((-5, 15))
+        ax.set_xlim((0, 10)); ax.set_xlabel('$X_1$')
+        ax.set_ylim((-1, 1)); ax.set_ylabel('$Y_{1,1}$')
+        ax.set_zlim((-1, 1)); ax.set_zlabel('$Y_{2,1}$')
         
         # choose a different color for each trajectory
         colors = plt.cm.jet(np.linspace(0, 1, num_traj))
         
         for i in range(num_traj):
-            x1, x2, x3 = x_t[i,:,:].T
+            x1, x2, x3 = X_t[i,:,0], Y_t[i,:,0,0], Y_t[i,:,1,0]
             lines = ax.plot(x1, x2, x3, '-', c=colors[i])
             plt.setp(lines, linewidth=2)
         
@@ -216,41 +155,74 @@ if __name__ == '__main__':
     import os
     import pandas as pd
     import seaborn as sns
-    from mpl_toolkits.mplot3d import Axes3D
-    #### -- demonstration -- ####
-    num_traj = 10
-    t = np.linspace(0, 10, 100)
-    L, K = 10, 2
-    n = (L+1) * K
-    x_t = np.zeros((num_traj,100,2*K))
-    for i in range(num_traj):
-        x0 = np.random.randn(num_traj,n)
-        
-        ode = lorenz96(x0=x0, t=t, L=L, K=K)
-        xts, yts = ode.solve()
-        yts=yts.mean(axis=2)
-        x_t[i] = np.hstack((xts,yts))
-        
+    sns.set(font_scale=1.1)
     
+    #### -- demonstration -- ####
+    #### -- one short trajectory -- ####
+    num_traj = 1
+    K, L = 2, 10
+    ode = lrz96(num_traj=num_traj,K=K,L=L,max_time=3,time_res=1000)
+    x_t = ode.solve().squeeze()
+    X = x_t[:,:ode.K]; Y = x_t[:,ode.K:].reshape((-1,ode.L,ode.K))
+    fig = plt.figure(figsize=(18,6))
+    ax1 = fig.add_subplot(1,3,1, projection='3d')
+    ode.plot_soln(ax=ax1,angle=10)
+    for i in range(4):
+        if i//2==0:
+            ax2_i = fig.add_subplot(2,3,(i//2)*3+2+i%2)
+        else:
+            ax2_i = fig.add_subplot(2,3,(i//2)*3+2+i%2, sharex=ax2_i)
+        if i%2==0:
+            ax2_i.plot(ode.t, X[:,i//2])
+            ax2_i.set_ylabel('$X_{}$'.format(i//2+1), rotation='horizontal')
+        else:
+            ax2_i.plot(ode.t, Y[:,:,i//2].mean(axis=1))
+            ax2_i.plot(ode.t, Y[:,:,i//2], color='grey',alpha=.4)
+            ax2_i.set_ylabel('$Y_{\cdot,%d}$' % (i//2+1), rotation='horizontal')
+        if i//2==1:
+            ax2_i.set_xlabel('t')
+    plt.savefig(os.path.join(os.getcwd(),'properties/single_traj.png'),bbox_inches='tight')
+    
+    #### -- multiple short trajectories -- ####
+    num_traj = 3
+    K, L = 2, 10
+    ode = lrz96(num_traj=num_traj,K=K,L=L,max_time=3,time_res=1000)
+    x_t = ode.solve()
     fig = plt.figure(figsize=(12,6))
     ax1 = fig.add_subplot(1,2,1, projection='3d')
-    #ode.plot_soln(ax=ax1,angle=10)
-    for i in range(min(K,3)):
+    ode.plot_soln(ax=ax1,angle=10)
+    for i in range(3):
         if i==0:
             ax2_i = fig.add_subplot(3,2,(i+1)*2)
         else:
             ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
-        ax2_i.plot(ode.t, x_t[:,:,i+K].T) #i+K for first 3 y_k, x_t[:,:,i] for first 3 x_k
-        # ax2_i.set_title('Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
-        ax2_i.set_ylabel({0:'x',1:'y',2:'z'}[i], rotation='horizontal')
+        ax2_i.plot(ode.t, x_t[:,:,i*ode.K].T)
+        # ax2_i.set_title('Trajectories of '+('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i]+'$(t)$')
+        ax2_i.set_ylabel(('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i], rotation='horizontal')
         if i==2:
             ax2_i.set_xlabel('t')
     plt.savefig(os.path.join(os.getcwd(),'properties/multi_traj.png'),bbox_inches='tight')
-                             
-    '''
     
-   
-    xts_avg = pd.DataFrame(xt_multrj_avg,columns=['x_avg','y_avg','z_avg'])
+    #### -- multiple short trajectories -- ####
+    # define the Lorenz96 ODE
+    num_traj = 500
+    ode_multrj = lrz96(num_traj=num_traj,K=K,L=L,max_time=5,time_res=1000)
+    # generate n trajectories
+    xt_multrj = ode_multrj.solve()
+    # ode_multrj.plot_soln()
+    # plt.show()
+    # average trajectory
+    xt_multrj_avg = xt_multrj.mean(axis=1)
+    print("The mean of time-averages for {:d} short trajectories is: ".format(num_traj))
+    print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
+    # plot
+    # fig,axes = plt.subplots(nrows=1,ncols=3,sharex=False,sharey=True,figsize=(16,4))
+    # for i, ax in enumerate(axes.flat):
+    #     plt.axes(ax)
+    #     plt.hist(xt_multrj_avg[:,i*self.L])
+    #     plt.title('Average '+('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i]+'$(t)$')
+    # plt.show()
+    xts_avg = pd.DataFrame(xt_multrj_avg[:,np.arange(3)*ode.K],columns=['x1_avg','y11_avg','y21_avg'])
     g = sns.PairGrid(xts_avg, diag_sharey=False, size=3)
     g.map_upper(sns.scatterplot, size=5)
     g.map_lower(sns.kdeplot)
@@ -258,9 +230,9 @@ if __name__ == '__main__':
     g.savefig(os.path.join(os.getcwd(),'properties/multi_traj_avg.png'),bbox_inches='tight')
     
     #### -- one long trajectories -- ####
-    # define the Rossler ODE
+    # define the Lorenz96 ODE
     num_traj = 1
-    ode_multrj = rossler(num_traj=num_traj,max_time=5000,time_res=50000)
+    ode_multrj = lrz96(num_traj=num_traj,K=K,L=L,max_time=1000,time_res=10000)
     # generate n trajectories
     xt_multrj = ode_multrj.solve()
     # ode_multrj.plot_soln()
@@ -282,10 +254,16 @@ if __name__ == '__main__':
     #         plt.plot(ode_multrj.t[-np.floor(len(ode_multrj.t)*pcnt).astype(int):], xt_multrj[:,-np.floor(len(ode_multrj.t)*pcnt).astype(int):,i].T)
     #         plt.title('Last '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
     # plt.show()
-    xt = pd.DataFrame(xt_multrj.squeeze()[::10],columns=['x','y','z'])
+    xt = pd.DataFrame(xt_multrj.squeeze()[::10,np.arange(3)*ode.K],columns=['$X_1$','$Y_{1,1}$','$Y_{2,1}$'])
     g = sns.PairGrid(xt, diag_sharey=False, size=3)
     g.map_upper(sns.scatterplot, size=5)
     g.map_lower(sns.kdeplot)
     g.map_diag(sns.kdeplot)
+    for ax in g.axes.flatten():
+        # rotate x axis labels
+        # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+        # rotate y axis labels
+        ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+        # set y labels alignment
+        ax.yaxis.get_label().set_horizontalalignment('right')
     g.savefig(os.path.join(os.getcwd(),'properties/long_traj.png'),bbox_inches='tight')
-    '''
