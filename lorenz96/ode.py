@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -64,9 +64,9 @@ class lrz96:
         """
         c = np.exp(logc)
         X = x[:self.K]; Y = x[self.K:].reshape((self.L, self.K))
-        dX = -np.roll(X,-1)*(np.roll(X,-2)-np.roll(X,1)) -X + F - h*c*Y.mean(axis=0)
+        dX = -np.roll(X,1)*(np.roll(X,2)-np.roll(X,-1)) -X + F - h*c*Y.mean(axis=0)
         Y_flatF = Y.flatten('F')
-        dY = c*( -b*np.reshape(np.roll(Y_flatF,1)*(np.roll(Y_flatF,2)-np.roll(Y_flatF,-1)),(self.L,self.K),'F') -Y + h/self.L * X[None,:] ) # (L,K)
+        dY = c*( -b*np.reshape(np.roll(Y_flatF,-1)*(np.roll(Y_flatF,-2)-np.roll(Y_flatF,1)),(self.L,self.K),'F') -Y + h/self.L * X[None,:] ) # (L,K)
         return np.append(dX,dY.flatten())
     
     def solveFwd(self, params=None, t=None):
