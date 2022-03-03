@@ -68,7 +68,7 @@ if __name__=='__main__':
     obs_times = np.linspace(t_init, t_final, time_res)
     K, L = 36, 10
     avg_traj = 'aug' # True; False
-    var_out = 'cov' #'cov' ; False   
+    var_out = True #'cov' ; False   
     STlik = False
     lrz96 = Lorenz96(ode_params=ode_params, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     

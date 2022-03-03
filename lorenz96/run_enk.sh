@@ -4,10 +4,10 @@
 #SBATCH -c 5                        # number of "tasks" (cores)
 #SBATCH --mem=64G                   # GigaBytes of memory required (per node)
 
-#SBATCH -p serial                   # partition 
+#SBATCH -p parallel                 # partition 
 #SBATCH -q normal                   # QOS
 
-#SBATCH -t 1-12:00                  # wall time (D-HH:MM)
+#SBATCH -t 2-00:00                  # wall time (D-HH:MM)
 ##SBATCH -A slan7                   # Account hours will be pulled from (commented out with double # in front)
 #SBATCH -o %x.log                   # STDOUT (%j = JobId)
 #SBATCH -e %x.err                   # STDERR (%j = JobId)
@@ -19,11 +19,10 @@
 module load anaconda3/2020.2
 
 # go to working directory
-cd ~/Projects/ST-inverse/code/Rossler
+cd ~/Projects/ST-inverse/code/Lorenz96
 
 # run python script
  if [ $# -eq 0 ]; then
-	mc_name='geoinfMC'
 	alg_NO=0
 	mdl_NO=0
 	ensbl_size=100
@@ -59,4 +58,4 @@ else
 	exit 0
 fi
 
-python -u run_rossler_EnK.py ${alg_NO} ${mdl_NO} ${ensbl_size} #> ${alg_name}_${mdl_name}_J${ensbl_size}.log
+python -u run_lorenz96_EnK.py ${alg_NO} ${mdl_NO} ${ensbl_size} #> ${alg_name}_${mdl_name}_J${ensbl_size}.log

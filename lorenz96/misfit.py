@@ -91,7 +91,7 @@ class misfit:
                     # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.nzvar.mean(axis=0).sum(), store_eig=True)
                 elif self.STlik=='full':
                     # -- model 1 -- full STGP
-                    sigma2=np.ones((np.prod(self.obs.shape[:]),)*2); np.fill_diagonal(sigma2, np.sqrt(np.tile(sigma2_,len(self.obs_times))))
+                    sigma2=np.ones((np.prod(self.obs.shape[1:]),)*2); np.fill_diagonal(sigma2, np.sqrt(np.tile(sigma2_,len(self.obs_times))))
                     # self.stgp=GP(self.obs.flatten(), l=.4, sigma2=sigma2, store_eig=True, jit=1e-2)
                     l_=np.tile([.1, 1e-2]*self.ode.K, len(self.obs_times))
                     l_x = squareform(np.sqrt(l_[:,None]*l_),checks=False)
@@ -159,11 +159,10 @@ class misfit:
         """
         if sol is None:
             sol = self.ode.solve(params=tuple(self.true_params.values()), t=self.obs_times)
-        assert np.ndim(sol)==3, 'The shape of solution should be (num_traj, time_res, (1+L)K)!'
+        assert np.ndim(sol)==3, 'The shape of solution should be (num_traj, time_res, K(1+L))!'
         num_traj = sol.shape[0]
-        K,L = self.ode.K,self.ode.L
-        X = sol[:,:,:K]; Y = sol[:,:,K:].reshape(sol.shape[:2]+(L,K)).mean(axis=2)
-        sol = np.concatenate((X,Y),axis=-1)
+        sol = self._condenseY(sol) # (num_traj, time_res, 2K)
+        X = sol[:,:,:self.ode.K]; Y = sol[:,:,self.ode.K:]
         if self.avg_traj:
             obs = sol.mean(axis=1) # (num_traj, 2K)
             if self.avg_traj=='aug':
@@ -270,7 +269,7 @@ class misfit:
 if __name__ == '__main__':
     np.random.seed(2021)
     # define misfit
-    num_traj=1; avg_traj=False; var_out='cov'
+    num_traj=1; avg_traj=False; var_out=True
     mft = misfit(num_traj=num_traj, avg_traj=avg_traj, var_out=var_out, save_obs=False, STlik=True)
     
     # test gradient

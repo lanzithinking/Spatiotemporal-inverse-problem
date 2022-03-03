@@ -1,5 +1,5 @@
 """
-Main function to run ensemble Kalman (EnK) algorithms for Rossler inverse problem with different spin-up times and average time lengths.
+Main function to run ensemble Kalman (EnK) algorithms for Lorenz96 inverse problem with different spin-up times and average time lengths.
 Shiwei Lan @ ASU, 2021
 """
 
@@ -8,7 +8,7 @@ import os,argparse,pickle
 import numpy as np
 
 # the inverse problem
-from Rossler import Rossler
+from Lorenz96 import Lorenz96
 
 from joblib import Parallel, delayed
 import multiprocessing
@@ -27,7 +27,7 @@ def main(seed=2021, t0=100, t_res=100):
     parser.add_argument('algNO', nargs='?', type=int, default=0)
     parser.add_argument('mdlNO', nargs='?', type=int, default=0)
     parser.add_argument('ensemble_size', nargs='?', type=int, default=500)
-    parser.add_argument('max_iter', nargs='?', type=int, default=50)
+    parser.add_argument('max_iter', nargs='?', type=int, default=25)
     parser.add_argument('step_sizes', nargs='?', type=float, default=[1.,.1])
     parser.add_argument('algs', nargs='?', type=str, default=('EKI','EKS'))
     parser.add_argument('mdls', nargs='?', type=str, default=('simple','STlik'))
@@ -35,44 +35,44 @@ def main(seed=2021, t0=100, t_res=100):
     
     # set random seed
     np.random.seed(seed)
-
-    ## define Rossler inverse problem ##
+    
+    ## define Lorenz96 inverse problem ##
     num_traj = 1 # only consider single trajectory!
-    prior_params = {'mean':[-1.5, -1.5, 2], 'std':[0.15, 0.15, 0.2]}
     t_init = t0
     time_res = t_res
-    dt = 1
+    dt = 0.1
     t_final = t_init + time_res*dt
     obs_times = np.linspace(t_init, t_final, time_res)
+    K, L = 36, 10
     avg_traj = {'simple':'aug','STlik':False}[args.mdls[args.mdlNO]] # True; 'aug'; False
     var_out = True # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
-    rsl = Rossler(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik,
-                  use_saved_obs=False, save_obs=False) # set use_saved_obs=True when varying observation window size t_res
+    lrz96 = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik,
+                     use_saved_obs=True, save_obs=False) # set use_saved_obs=True when varying observation window size t_res
     
     # initialization
-    u0=rsl.prior.sample(n=args.ensemble_size)
-    # G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze() for u_j in u])
+    u0=lrz96.prior.sample(n=args.ensemble_size)
+    # G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=np.exp(u_j), t=lrz96.obs_times)).squeeze() for u_j in u])
     if args.ensemble_size>200:
         n_jobs = np.min([10, multiprocessing.cpu_count()])
-        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
-    # y=rsl.misfit.obs[0]
+        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=np.exp(u_j), t=lrz96.obs_times)).squeeze())(u_j) for u_j in u))
+    # y=lrz96.misfit.obs[0]
     if STlik:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten() for u_j in u])
+            G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).flatten() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).flatten())(u_j) for u_j in u))
-        y=rsl.misfit.obs[0].flatten()
-        nz_cov=rsl.misfit.stgp.tomat()
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).flatten())(u_j) for u_j in u))
+        y=lrz96.misfit.obs[0].flatten()
+        nz_cov=lrz96.misfit.stgp.tomat()
     else:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze() for u_j in u])
+            G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).squeeze() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:rsl.misfit.observe(sol=rsl.ode.solve(params=np.exp(u_j), t=rsl.obs_times)).squeeze())(u_j) for u_j in u))
-        y=rsl.misfit.obs[0]
-        nz_cov=np.diag(rsl.misfit.nzvar[0]) if np.ndim(rsl.misfit.nzvar)==2 else rsl.misfit.nzvar[0]
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).squeeze())(u_j) for u_j in u))
+        y=lrz96.misfit.obs[0]
+        nz_cov=np.diag(lrz96.misfit.nzvar[0]) if np.ndim(lrz96.misfit.nzvar)==2 else lrz96.misfit.nzvar[0]
     data={'obs':y,'size':y.size,'cov':nz_cov}
-    prior={'mean':rsl.prior.mean,'cov':np.diag(rsl.prior.std)**2,'sample':rsl.prior.sample}
+    prior={'mean':lrz96.prior.mean,'cov':np.diag(lrz96.prior.var),'sample':lrz96.prior.sample}
     
     # EnK parameters
     nz_lvl=1.0
@@ -94,7 +94,7 @@ def main(seed=2021, t0=100, t_res=100):
     if not os.path.exists(savepath):
         print('Save path does not exist; created one.')
         os.makedirs(savepath)
-    filename='Rossler_'+{True:'avg',False:'full','aug':'avgaug'}[rsl.misfit.avg_traj]+'_'+ \
+    filename='Lorenz96_'+{True:'avg',False:'full','aug':'avgaug'}[lrz96.misfit.avg_traj]+'_'+ \
              enk.alg+'_ensbl'+str(enk.J)+'_dim'+str(enk.D)+'_Tinit'+str(t_init)+'_T'+str(time_res)+'_seed'+str(seed)
              # args.algs[args.algNO]+'_ensbl'+str(args.ensemble_size)+'_dim'+str(u0.shape[1])+'_Tinit'+str(t_init)+'_T'+str(time_res)+'_seed'+str(seed)          
     np.savez_compressed(os.path.join(savepath,filename), *return_list)

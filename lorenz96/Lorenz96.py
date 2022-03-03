@@ -99,15 +99,7 @@ class Lorenz96:
         """
         Compute the gradient of misfit (default), or the gradient of negative log-posterior for given parameter.
         """
-        if parameter is None:
-            parameter=self.prior.mean
-        self.x[PARAMETER] = np.exp(parameter)
-        x = self.x[STATE]
-        self.x[ADJOINT] = self.ode.solveAdj(self.x[PARAMETER], self.misfit.obs_times, x, self.misfit, cont_soln=self.cont_soln)
-        dt = np.diff(self.misfit.obs_times[:2])
-        grad = np.sum(self.x[ADJOINT]*np.stack([-(x[:,:,1]-x[:,:,0]), x[:,:,2], -x[:,:,0]], axis=-1), axis=(0,1))[[0,2,1]] *dt * self.x[PARAMETER] # exp transform
-        if not MF_only: grad += self.prior.grad(parameter)
-        return grad
+        raise NotImplementedError('Gradient not implemented.')
 
     def _get_HessApply(self, parameter=None, MF_only=True):
         """
@@ -161,10 +153,11 @@ class Lorenz96:
         param0 = {'current':self.x[PARAMETER], 'random':self.prior.sample(), 'zero':np.zeros_like(self.x[PARAMETER])}[init]
         self.x[PARAMETER] = param0
         fun = lambda parameter: self._get_misfit(parameter, MF_only=False)
-        grad = lambda parameter: self._get_grad(parameter, MF_only=False)
+        # grad = lambda parameter: self._get_grad(parameter, MF_only=False)
         # solve for MAP
         start = time.time()
-        res = optimize.minimize(fun, param0, method='BFGS', jac=grad, options={'gtol': 1e-4, 'disp': True})
+        # res = optimize.minimize(fun, param0, method='BFGS', jac=grad, options={'gtol': 1e-4, 'disp': True})
+        res = optimize.minimize(fun, param0, method='BFGS', options={'maxiter': 1000, 'disp': True})
         end = time.time()
         print('\nTime used is %.4f' % (end-start))
         # print out info
@@ -244,11 +237,11 @@ if __name__ == '__main__':
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     K, L = 36, 10
-    avg_traj = 'aug'
-    var_out = 'cov'
-    lrz = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False)
-    # test
-    lrz.test(1e-8)
+    avg_traj = False
+    var_out = True
+    lrz = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=True)
+    # # test
+    # lrz.test(1e-8)
     # obtain MAP
     map_v = lrz.get_MAP(init='random',SAVE=True)
     print('MAP estimate: '+(min(len(map_v),10)*"%.4f ") % tuple(map_v[:min(len(map_v),10)]) )

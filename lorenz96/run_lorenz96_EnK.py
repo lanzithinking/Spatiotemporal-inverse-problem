@@ -1,5 +1,5 @@
 """
-Main function to run ensemble Kalman (EnK) algorithms for Rossler inverse problem
+Main function to run ensemble Kalman (EnK) algorithms for Lorenz96 inverse problem
 Shiwei Lan @ ASU, 2021
 """
 
@@ -25,54 +25,52 @@ np.set_printoptions(precision=3, suppress=True)
 def main(seed=2021):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
-    parser.add_argument('mdlNO', nargs='?', type=int, default=1)
+    parser.add_argument('mdlNO', nargs='?', type=int, default=0)
     parser.add_argument('ensemble_size', nargs='?', type=int, default=100)
-    parser.add_argument('max_iter', nargs='?', type=int, default=50)
+    parser.add_argument('max_iter', nargs='?', type=int, default=25)
     parser.add_argument('step_sizes', nargs='?', type=float, default=[1.,.1])
     parser.add_argument('algs', nargs='?', type=str, default=('EKI','EKS'))
     parser.add_argument('mdls', nargs='?', type=str, default=('simple','STlik'))
     args = parser.parse_args()
     
     # set random seed
-    np.random.seed(seed)  
-    ## define lorenz96 inverse problem ##
-    num_traj = 1
-    t_init = 0
-    t_final = 10
-    time_res = 200
+    np.random.seed(seed)
+    
+    ## define Lorenz96 inverse problem ##
+    num_traj = 1 # only consider single trajectory!
+    t_init = 100
+    t_final = 110
+    time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    L, K = 5, 8
-    n = (L+1) * K
-    avg_traj = {'simple':True,'STlik':False}[args.mdls[args.mdlNO]] # True; False
-    var_out = True #'cov' ; False   
+    K, L = 36, 10
+    avg_traj = {'simple':'aug','STlik':False}[args.mdls[args.mdlNO]] # True; 'aug'; False
+    var_out = True # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
+    lrz96 = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     
-    lorenz96 = Lorenz96(obs_times=obs_times, L=L, K=K, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
-    
-        
     # initialization
-    u0=lorenz96.prior.sample(n=args.ensemble_size)
-    # G=lambda u:np.stack([lorenz96.misfit.observe(sol=lorenz96.ode.solve(params=np.exp(u_j), t=lorenz96.obs_times)).squeeze() for u_j in u])
+    u0=lrz96.prior.sample(n=args.ensemble_size)
+    # G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=np.exp(u_j), t=lrz96.obs_times)).squeeze() for u_j in u])
     if args.ensemble_size>200:
         n_jobs = np.min([10, multiprocessing.cpu_count()])
-        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lorenz96.misfit.observe(sol=lorenz96.ode.solve(params=np.exp(u_j), t=lorenz96.obs_times)).squeeze())(u_j) for u_j in u))
-    # y=lorenz96.misfit.obs[0]
+        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=np.exp(u_j), t=lrz96.obs_times)).squeeze())(u_j) for u_j in u))
+    # y=lrz96.misfit.obs[0]
     if STlik:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([lorenz96.misfit.observe(sol=lorenz96.ode.solve(params=(u_j), t=lorenz96.obs_times)).flatten() for u_j in u])
+            G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).flatten() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lorenz96.misfit.observe(sol=lorenz96.ode.solve(params=(u_j), t=lorenz96.obs_times)).flatten())(u_j) for u_j in u))
-        y=lorenz96.misfit.obs.flatten()
-        nz_cov=lorenz96.misfit.stgp.tomat()
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).flatten())(u_j) for u_j in u))
+        y=lrz96.misfit.obs[0].flatten()
+        nz_cov=lrz96.misfit.stgp.tomat()
     else:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([lorenz96.misfit.observe(sol=lorenz96.ode.solve(params=(u_j), t=lorenz96.obs_times)).squeeze() for u_j in u])
+            G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).squeeze() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lorenz96.misfit.observe(sol=lorenz96.ode.solve(params=(u_j), t=lorenz96.obs_times)).squeeze())(u_j) for u_j in u))
-        y=lorenz96.misfit.obs #(K*5,)
-        nz_cov=np.diag(lorenz96.misfit.nzvar[0]) if np.ndim(lorenz96.misfit.nzvar)==2 else lorenz96.misfit.nzvar[0]
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).squeeze())(u_j) for u_j in u))
+        y=lrz96.misfit.obs[0] #(1,5K)
+        nz_cov=np.diag(lrz96.misfit.nzvar[0]) if np.ndim(lrz96.misfit.nzvar)==2 else lrz96.misfit.nzvar[0]
     data={'obs':y,'size':y.size,'cov':nz_cov}
-    prior={'mean':lorenz96.prior.mean,'cov':np.diag(lorenz96.prior.std)**2,'sample':lorenz96.prior.sample}
+    prior={'mean':lrz96.prior.mean,'cov':np.diag(lrz96.prior.var),'sample':lrz96.prior.sample}
     
     # EnK parameters
     nz_lvl=1.0
@@ -88,7 +86,7 @@ def main(seed=2021):
     
     # append extra information including the count of solving
     filename_=os.path.join(savepath,filename+'.pckl')
-    filename=os.path.join(savepath,'Lorenz96_'+{True:'avg',False:'full','aug':'avgaug'}[lorenz96.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
+    filename=os.path.join(savepath,'Lorenz96_'+{True:'avg',False:'full','aug':'avgaug'}[lrz96.misfit.avg_traj]+'_'+filename+'.pckl') # change filename
     os.rename(filename_, filename)
     f=open(filename,'ab')
     pickle.dump([obs_times,avg_traj,STlik,var_out,y,args],f)
