@@ -16,7 +16,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -78,9 +78,9 @@ class STGP_isub(STGP):#,GP):
         delta=kwargs.get('delta',1) # power of dynamic eigenvalues
         S=sps.diags(pow(self.Lambda**2/self.K,delta).flatten(),shape=(self.D,)*2) # (LJ,LJ)
         if delta==1:
-            S+=sps.kron(self.C_t.tomat(),sps.eye(self.L)) # (LJ,LJ)
+            S+=sps.kron(self.C_t.tomat(),np.eye(self.L)) # (LJ,LJ)
         else:
-            S+=sps.kron(self.C_t.act(np.eye(self.J),alpha=delta),sps.eye(self.L)) # (LJ,LJ)
+            S+=sps.kron(self.C_t.act(np.eye(self.J),alpha=delta),np.eye(self.L)) # (LJ,LJ)
         if self.spdapx and not sps.issparse(S):
             warnings.warn('Possible memory overflow!')
         return S

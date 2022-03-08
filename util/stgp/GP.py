@@ -16,7 +16,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -87,7 +87,7 @@ class GP:
         Powered exponential kernel: C(x,y)=sigma2*exp(-.5*(||x-y||/l)^s)
         """
         if len(args)==1:
-            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)))+(1.+self.jit)*sps.eye(self.N)
+            C=spsd.squareform(np.exp(-.5*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)))+(1.+self.jit)*np.eye(self.N)
         elif len(args)==2:
             C=np.exp(-.5*pow(spsd.cdist(args[0],args[1],self.dist_f,p=self.s)/self.l,self.s))
         else:
@@ -102,7 +102,7 @@ class GP:
         """
         if len(args)==1:
             scal_dist=np.sqrt(2.*self.nu)*pow(spsd.pdist(args[0],self.dist_f,p=self.s)/self.l,self.s)
-            C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*spsd.squareform(pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist))+(1.+self.jit)*sps.eye(self.N)
+            C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*spsd.squareform(pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist))+(1.+self.jit)*np.eye(self.N)
         elif len(args)==2:
             scal_dist=np.sqrt(2*self.nu)*pow(spsd.cdist(args[0],args[1],self.dist_f,p=self.s)/self.l,self.s)
             C=pow(2.,1-self.nu)/sp.special.gamma(self.nu)*pow(scal_dist,self.nu)*sp.special.kv(self.nu,scal_dist)

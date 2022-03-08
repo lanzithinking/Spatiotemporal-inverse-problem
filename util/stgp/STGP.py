@@ -15,7 +15,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -102,7 +102,7 @@ class STGP(GP):
         out=kwargs.get('out',{'sep':'z','kron_prod':'z','kron_sum':'xt'}[self.ker_opt]) # output option
         if self.ker_opt=='sep':
             C_xt=np.kron(self.C_t.tomat(),self.C_x.tomat()) # (IJ,IJ)
-            if 'z' in out: C_z=C_xt+beta*sps.eye(self.N) # (IJ,IJ)
+            if 'z' in out: C_z=C_xt+beta*np.eye(self.N) # (IJ,IJ)
         else:
             # Lambda_=self.Lambda**self.opt;
             # if alpha<0: Lambda_[Lambda_<self.jit]+=self.jit
@@ -113,7 +113,7 @@ class STGP(GP):
                 if trtdeg and self.L<self.I:
                     C_x0=(Phi_x*self.C_x.eigv[:self.L]).dot(Phi_x.T)
                     C_xt+=np.tile(self.C_x.tomat()-C_x0,(self.J,)*2)
-                if 'z' in out: C_z=C_xt*np.kron(self.C_t.tomat(),np.ones((self.I,)*2))+((alpha>=0)*self.jit+beta)*sps.eye(self.N) # (IJ,IJ)
+                if 'z' in out: C_z=C_xt*np.kron(self.C_t.tomat(),np.ones((self.I,)*2))+((alpha>=0)*self.jit+beta)*np.eye(self.N) # (IJ,IJ)
             elif self.ker_opt=='kron_sum':
                 Lambda2Phi=Lambda_[:,None,:]*Phi_x[None,:,:] # (J,I,L)
                 Lambda2Phi=Lambda2Phi.dot(Phi_x.T)+((alpha>=0)*self.jit)*np.eye(self.I)[None,:,:] # (J,I,I)
@@ -121,7 +121,7 @@ class STGP(GP):
                     C_x0=(Phi_x*self.C_x.eigv[:self.L]).dot(Phi_x.T)
                     Lambda2Phi+=np.tile(self.C_x.tomat()-C_x0,(self.J,1,1))
                 C_xt=sps.block_diag(Lambda2Phi,format='csr') # (IJ,IJ)
-                if 'z' in out: C_z=sps.kron(self.C_t.tomat(),sps.eye(self.I))+beta*C_xt # (IJ,IJ)
+                if 'z' in out: C_z=sps.kron(self.C_t.tomat(),np.eye(self.I))+beta*C_xt # (IJ,IJ)
         # if self.spdapx:
         #     warnings.warn('Possible memory overflow!')
         

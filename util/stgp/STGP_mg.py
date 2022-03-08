@@ -15,7 +15,7 @@ __author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2019, TESD project"
 __credits__ = ""
 __license__ = "GPL"
-__version__ = "0.8"
+__version__ = "0.9"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@gmail.com;"
 
@@ -220,9 +220,9 @@ class STGP_mg(STGP_isub,STGP,GP):
             MU=self.C_t.mult(self.solve(y).reshape((self.I,self.J,-1),order='F'),transp=True) # (I,J)
             chol=not self.spdapx
             if chol:
-#                 C_tI_x=sps.kron(self.C_t.tomat(),sps.eye(self.I)) # (IJ,IJ)
+#                 C_tI_x=sps.kron(self.C_t.tomat(),np.eye(self.I)) # (IJ,IJ)
 #                 Sigma=C_tI_x.dot(self.solve(STGP.tomat(self,out='xt')/self.K)) # (IJ,IJ)
-                Sigma=sps.kron(self.C_t.tomat(),sps.eye(self.I)).dot(self.solve(STGP.tomat(self,out='xt')/self.K))
+                Sigma=sps.kron(self.C_t.tomat(),np.eye(self.I)).dot(self.solve(STGP.tomat(self,out='xt')/self.K))
                 try:
 #                     cholSigma=spla.cholesky(Sigma,lower=True)
 #                     M=np.tensordot(cholSigma,mvn0Irv.reshape((self.N,-1),order='F'),1) # (IJ,1)
