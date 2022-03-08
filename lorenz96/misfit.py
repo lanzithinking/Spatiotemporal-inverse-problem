@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.4"
+__version__ = "0.5"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -76,15 +76,17 @@ class misfit:
                     # C_x=GP(self.obs.mean(axis=0).T, l=.3, sigma2=np.diag(np.sqrt(sigma2_)), store_eig=True)
                     sigma2=np.ones((self.obs.shape[2],)*2); np.fill_diagonal(sigma2, np.sqrt(sigma2_))
                     # C_x=GP(self.obs.mean(axis=0).T, l=.4, sigma2=sigma2, store_eig=True)
-                    # l_=np.array([.1, 1e-2, 1e-2, 1e-3, 1e-4]*self.ode.K)
-                    l_=np.array([.1, 1e-2]*self.ode.K)
+                    # l_=np.repeat([.1, 1e-2, 1e-2, 1e-3, 1e-4],self.ode.K)
                     # l_x = np.ones(int(5*self.ode.K*(5*self.ode.K-1)/2))
                     # k = 0
                     # for i in range(5*self.ode.K-1):
                     #     for j in range(i+1,5*self.ode.K):
                     #         l_x[k] = np.sqrt(l_[i]*l_[j])
                     #         k+=1
-                    l_x = squareform(np.sqrt(l_[:,None]*l_),checks=False)
+                    l_=np.repeat([.1, 1e-2],self.ode.K)
+                    l_x = squareform(np.sqrt(self.ode.K*l_[:,None]*l_),checks=False)
+                    # l_=np.repeat([1, .1],self.ode.K)
+                    # l_x = squareform(self.ode.K*l_[:,None]*l_,checks=False)
                     C_x=GP(self.obs.mean(axis=0).T, l=l_x, sigma2=sigma2, store_eig=True)
                     C_t=GP(self.obs_times, store_eig=True, l=0.1, sigma2=np.sqrt(sigma2_.sum()), jit=1e-2)#, ker_opt='matern',nu=.5)
                     self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
@@ -93,7 +95,7 @@ class misfit:
                     # -- model 1 -- full STGP
                     sigma2=np.ones((np.prod(self.obs.shape[1:]),)*2); np.fill_diagonal(sigma2, np.sqrt(np.tile(sigma2_,len(self.obs_times))))
                     # self.stgp=GP(self.obs.flatten(), l=.4, sigma2=sigma2, store_eig=True, jit=1e-2)
-                    l_=np.tile([.1, 1e-2]*self.ode.K, len(self.obs_times))
+                    l_=np.tile(np.repeat([.1, 1e-2],self.ode.K), len(self.obs_times))
                     l_x = squareform(np.sqrt(l_[:,None]*l_),checks=False)
                     self.stgp=GP(self.obs.flatten(), l=l_x, sigma2=sigma2, store_eig=True, jit=1e-2)
                 else:
@@ -145,10 +147,14 @@ class misfit:
             print('Observation'+(' file '+obs_file_name if save_obs else '')+' has been generated!')
         return obs, nzvar
     
-    def _condenseY(self, sol):
+    def _split(self, sol):
         K,L = self.ode.K,self.ode.L
-        X = sol[:,:,:K]; Y = sol[:,:,K:].reshape(sol.shape[:2]+(L,K)).mean(axis=2)
-        sol_cnds = np.concatenate((X,Y),axis=-1)
+        X = sol[:,:,:K]; Y = sol[:,:,K:].reshape(sol.shape[:2]+(L,K))
+        return X,Y
+    
+    def _condenseY(self, sol):
+        X,Y = self._split(sol)
+        sol_cnds = np.concatenate((X,Y.mean(axis=2)),axis=-1)
         return sol_cnds
     
     def observe(self, sol=None, var_out=False):
@@ -161,19 +167,19 @@ class misfit:
             sol = self.ode.solve(params=tuple(self.true_params.values()), t=self.obs_times)
         assert np.ndim(sol)==3, 'The shape of solution should be (num_traj, time_res, K(1+L))!'
         num_traj = sol.shape[0]
-        sol = self._condenseY(sol) # (num_traj, time_res, 2K)
-        X = sol[:,:,:self.ode.K]; Y = sol[:,:,self.ode.K:]
+        X,Y = self._split(sol)
+        sol = np.concatenate((X,Y.mean(axis=2)),axis=-1) # (num_traj, time_res, 2K)
         if self.avg_traj:
             obs = sol.mean(axis=1) # (num_traj, 2K)
             if self.avg_traj=='aug':
-                obs = np.hstack([obs,np.concatenate([X**2,Y**2,X*Y],axis=-1).mean(axis=1)]) # (num_traj, 5K)
+                obs = np.hstack([obs,np.concatenate([X**2,np.mean(Y**2,axis=2),X*Y.mean(axis=2)],axis=-1).mean(axis=1)]) # (num_traj, 5K)
         else:
             obs = sol # (num_traj, time_res, 2K)
         if var_out:
             nzvar = []
             for i in range(num_traj):
                 if self.avg_traj=='aug':
-                    solxt_i = np.hstack([sol[i],X[i]**2,Y[i]**2,X[i]*Y[i]])
+                    solxt_i = np.hstack([sol[i],X[i]**2,np.mean(Y[i]**2,axis=1),X[i]*Y[i].mean(axis=1)])
                 else:
                     solxt_i = sol[i]
                 if var_out=='cov':
@@ -237,10 +243,10 @@ class misfit:
             elif wrt=='sol':
                 K=self.ode.K
                 sol = self._condenseY(sol)
-                g = np.tile(d_obs[:,:,:2*K]/T,(1,T,1)) # (num_traj, time_res, 2K)
-                # g = np.tile(d_obs[:,:,:2*K]/T,(1,sol.shape[1],1)) # (num_traj, time_res, 2K)
+                # g = np.tile(d_obs[:,:,:2*K]/T,(1,T,1)) # (num_traj, time_res, 2K)
+                g = np.tile(d_obs[:,:,:2*K]/T,(1,sol.shape[1],1)) # (num_traj, time_res, 2K)
                 if self.avg_traj=='aug':
-                    g += d_obs[:,:,2*K:4*K]*sol*2/T
+                    g += d_obs[:,:,2*K:4*K]*sol*2/T # not exact for g[:,:,3K:4K] for d\bar{Y^2}/d\bar{Y}(t); but gradient is not used in adjoint which is not implemented
                     sol3 = np.zeros(sol.shape+(K,))
                     for k in range(K):
                         sol3[:,:,k,k] = sol[:,:,K+k]
@@ -276,7 +282,7 @@ if __name__ == '__main__':
     sol = mft.ode.solve(params=(1.0, 10.0, np.log(10), 10.0), t=mft.obs_times)
     c = mft.cost(sol)
     g = mft.grad(sol, wrt='sol')
-    h = 1e-7
+    h = 1e-4
     dsol = np.random.randn(*sol.shape)
     c1 = mft.cost(sol +  h*dsol)
     gdsol_fd = (c1-c)/h

@@ -23,7 +23,6 @@ cd ~/Projects/ST-inverse/code/Chen
 
 # run python script
  if [ $# -eq 0 ]; then
-	mc_name='geoinfMC'
 	alg_NO=0
 	mdl_NO=0
 	ensbl_size=100

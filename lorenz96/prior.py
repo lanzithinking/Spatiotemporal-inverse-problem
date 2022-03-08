@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -22,7 +22,7 @@ class prior:
     """
     (Normal) prior for parameters in Lorenz96 inverse problem.
     """
-    def __init__(self, mean=[0, 10, 2, 5], var=[1, 10, 0.1, 10]):
+    def __init__(self, mean=[0, 8, 2, 8], var=[1, 10, 0.1, 10]):
         """
         mean and standard deviation for (h, F, logc, b)
         """

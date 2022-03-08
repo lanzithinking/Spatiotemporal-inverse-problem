@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -69,7 +69,7 @@ class lrz96:
         dY = c*( -b*np.reshape(np.roll(Y_flatF,-1)*(np.roll(Y_flatF,-2)-np.roll(Y_flatF,1)),(self.L,self.K),'F') -Y + h/self.L * X[None,:] ) # (L,K)
         return np.append(dX,dY.flatten())
     
-    def solveFwd(self, params=None, t=None):
+    def solveFwd(self, params=None, t=None, solver='solve_ivp'):
         """
         Solve the forward equation
         """
@@ -79,12 +79,16 @@ class lrz96:
             params = tuple(params)
         if t is None:
             t = self.t
-        # x_t = np.asarray([integrate.odeint(self._dx, x0i, t, args=params, tfirst=True) for x0i in self.x0]) # (num_traj, time_res, K(1+L))
-        sol = [integrate.solve_ivp(self._dx, (min(t),max(t)), x0i, t_eval=t, args=params, dense_output=True,) for x0i in self.x0]
-        x_t = np.asarray([sol_i.y.T for sol_i in sol]) # (num_traj, time_res, K(1+L))
-        cont_soln = [sol_i.sol for sol_i in sol]
+        if solver=='odeint':
+            x_t = np.asarray([integrate.odeint(self._dx, x0i, t, args=params, tfirst=True) for x0i in self.x0]) # (num_traj, time_res, K(1+L))
+        elif solver=='solve_ivp':
+            sol = [integrate.solve_ivp(self._dx, (min(t),max(t)), x0i, t_eval=t, args=params, dense_output=False,) for x0i in self.x0]
+            x_t = np.asarray([sol_i.y.T for sol_i in sol]) # (num_traj, time_res, K(1+L))
+            # cont_soln = [sol_i.sol for sol_i in sol]
+        else:
+            raise ValueError('Solver not recognized.')
         self.soln_count[0] += 1
-        return x_t, cont_soln
+        return x_t, #cont_soln
     
     # def _dlmd(self, lmd, t, h, F, logc, b, x_f, g_f):
     def _dlmd(self, t, lmd, h, F, logc, b, x_f, g_f):
@@ -108,7 +112,7 @@ class lrz96:
         if t is None:
             t = self.t
         if opt == 'fwd':
-            out = self.solveFwd(params, t)[0] # (num_traj, time_res, K(1+L))
+            out = self.solveFwd(params, t, **kwargs)[0] # (num_traj, time_res, K(1+L))
         elif opt == 'adj':
             out = self.solveAdj(params, t, **kwargs)
         else:
@@ -152,118 +156,145 @@ class lrz96:
 
 if __name__ == '__main__':
     np.random.seed(2021)
-    import os
-    import pandas as pd
-    import seaborn as sns
-    sns.set(font_scale=1.1)
+    # import os
+    # import pandas as pd
+    # import seaborn as sns
+    # sns.set(font_scale=1.1)
+    #
+    # #### -- demonstration -- ####
+    # #### -- one short trajectory -- ####
+    # num_traj = 1
+    # K, L = 2, 10
+    # ode = lrz96(num_traj=num_traj,K=K,L=L,max_time=3,time_res=1000)
+    # x_t = ode.solve().squeeze()
+    # X = x_t[:,:ode.K]; Y = x_t[:,ode.K:].reshape((-1,ode.L,ode.K))
+    # fig = plt.figure(figsize=(18,6))
+    # ax1 = fig.add_subplot(1,3,1, projection='3d')
+    # ode.plot_soln(ax=ax1,angle=10)
+    # for i in range(4):
+    #     if i//2==0:
+    #         ax2_i = fig.add_subplot(2,3,(i//2)*3+2+i%2)
+    #     else:
+    #         ax2_i = fig.add_subplot(2,3,(i//2)*3+2+i%2, sharex=ax2_i)
+    #     if i%2==0:
+    #         ax2_i.plot(ode.t, X[:,i//2])
+    #         ax2_i.set_ylabel('$X_{}$'.format(i//2+1), rotation='horizontal')
+    #     else:
+    #         ax2_i.plot(ode.t, Y[:,:,i//2].mean(axis=1))
+    #         ax2_i.plot(ode.t, Y[:,:,i//2], color='grey',alpha=.4)
+    #         ax2_i.set_ylabel('$Y_{\cdot,%d}$' % (i//2+1), rotation='horizontal')
+    #     if i//2==1:
+    #         ax2_i.set_xlabel('t')
+    # plt.savefig(os.path.join(os.getcwd(),'properties/single_traj.png'),bbox_inches='tight')
+    #
+    # #### -- multiple short trajectories -- ####
+    # num_traj = 3
+    # K, L = 2, 10
+    # ode = lrz96(num_traj=num_traj,K=K,L=L,max_time=3,time_res=1000)
+    # x_t = ode.solve()
+    # fig = plt.figure(figsize=(12,6))
+    # ax1 = fig.add_subplot(1,2,1, projection='3d')
+    # ode.plot_soln(ax=ax1,angle=10)
+    # for i in range(3):
+    #     if i==0:
+    #         ax2_i = fig.add_subplot(3,2,(i+1)*2)
+    #     else:
+    #         ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
+    #     ax2_i.plot(ode.t, x_t[:,:,i*ode.K].T)
+    #     # ax2_i.set_title('Trajectories of '+('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i]+'$(t)$')
+    #     ax2_i.set_ylabel(('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i], rotation='horizontal')
+    #     if i==2:
+    #         ax2_i.set_xlabel('t')
+    # plt.savefig(os.path.join(os.getcwd(),'properties/multi_traj.png'),bbox_inches='tight')
+    #
+    # #### -- multiple short trajectories -- ####
+    # # define the Lorenz96 ODE
+    # num_traj = 500
+    # ode_multrj = lrz96(num_traj=num_traj,K=K,L=L,max_time=5,time_res=1000)
+    # # generate n trajectories
+    # xt_multrj = ode_multrj.solve()
+    # # ode_multrj.plot_soln()
+    # # plt.show()
+    # # average trajectory
+    # xt_multrj_avg = xt_multrj.mean(axis=1)
+    # print("The mean of time-averages for {:d} short trajectories is: ".format(num_traj))
+    # print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
+    # # plot
+    # # fig,axes = plt.subplots(nrows=1,ncols=3,sharex=False,sharey=True,figsize=(16,4))
+    # # for i, ax in enumerate(axes.flat):
+    # #     plt.axes(ax)
+    # #     plt.hist(xt_multrj_avg[:,i*self.L])
+    # #     plt.title('Average '+('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i]+'$(t)$')
+    # # plt.show()
+    # xts_avg = pd.DataFrame(xt_multrj_avg[:,np.arange(3)*ode.K],columns=['x1_avg','y11_avg','y21_avg'])
+    # g = sns.PairGrid(xts_avg, diag_sharey=False, size=3)
+    # g.map_upper(sns.scatterplot, size=5)
+    # g.map_lower(sns.kdeplot)
+    # g.map_diag(sns.kdeplot)
+    # g.savefig(os.path.join(os.getcwd(),'properties/multi_traj_avg.png'),bbox_inches='tight')
+    #
+    # #### -- one long trajectories -- ####
+    # # define the Lorenz96 ODE
+    # num_traj = 1
+    # ode_multrj = lrz96(num_traj=num_traj,K=K,L=L,max_time=1000,time_res=10000)
+    # # generate n trajectories
+    # xt_multrj = ode_multrj.solve()
+    # # ode_multrj.plot_soln()
+    # # plt.show()
+    # # average trajectory
+    # xt_multrj_avg = xt_multrj.mean(axis=1)
+    # print("The mean of time-averages for {:d} long trajectories is: ".format(num_traj))
+    # print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
+    # # plot
+    # # pcnt=.1
+    # # fig,axes = plt.subplots(nrows=3,ncols=2,sharex=False,sharey=False,figsize=(16,10))
+    # # for k, ax in enumerate(axes.flat):
+    # #     plt.axes(ax)
+    # #     i=k//2; j=k%2
+    # #     if j==0:
+    # #         plt.plot(ode_multrj.t[:np.floor(len(ode_multrj.t)*pcnt).astype(int)], xt_multrj[:,:np.floor(len(ode_multrj.t)*pcnt).astype(int),i].T)
+    # #         plt.title('First '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
+    # #     elif j==1:
+    # #         plt.plot(ode_multrj.t[-np.floor(len(ode_multrj.t)*pcnt).astype(int):], xt_multrj[:,-np.floor(len(ode_multrj.t)*pcnt).astype(int):,i].T)
+    # #         plt.title('Last '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
+    # # plt.show()
+    # xt = pd.DataFrame(xt_multrj.squeeze()[::10,np.arange(3)*ode.K],columns=['$X_1$','$Y_{1,1}$','$Y_{2,1}$'])
+    # g = sns.PairGrid(xt, diag_sharey=False, size=3)
+    # g.map_upper(sns.scatterplot, size=5)
+    # g.map_lower(sns.kdeplot)
+    # g.map_diag(sns.kdeplot)
+    # for ax in g.axes.flatten():
+    #     # rotate x axis labels
+    #     # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+    #     # rotate y axis labels
+    #     ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+    #     # set y labels alignment
+    #     ax.yaxis.get_label().set_horizontalalignment('right')
+    # g.savefig(os.path.join(os.getcwd(),'properties/long_traj.png'),bbox_inches='tight')
+    #
+    # #### -- steady state -- ####
+    # import time
+    # start = time.time()
+    # ode = lrz96(max_time=1e4,time_res=10000)
+    # steady_state = ode.solve()[:,-1,:]
+    # end = time.time()
+    # print('Time used is %.4f' % (end-start))
+    # import pickle
+    # f=open(os.path.join(os.getcwd(),'steady_state.pckl'),'wb')
+    # pickle.dump(steady_state,f)
+    # f.close()
     
-    #### -- demonstration -- ####
-    #### -- one short trajectory -- ####
-    num_traj = 1
-    K, L = 2, 10
-    ode = lrz96(num_traj=num_traj,K=K,L=L,max_time=3,time_res=1000)
-    x_t = ode.solve().squeeze()
-    X = x_t[:,:ode.K]; Y = x_t[:,ode.K:].reshape((-1,ode.L,ode.K))
-    fig = plt.figure(figsize=(18,6))
-    ax1 = fig.add_subplot(1,3,1, projection='3d')
-    ode.plot_soln(ax=ax1,angle=10)
-    for i in range(4):
-        if i//2==0:
-            ax2_i = fig.add_subplot(2,3,(i//2)*3+2+i%2)
-        else:
-            ax2_i = fig.add_subplot(2,3,(i//2)*3+2+i%2, sharex=ax2_i)
-        if i%2==0:
-            ax2_i.plot(ode.t, X[:,i//2])
-            ax2_i.set_ylabel('$X_{}$'.format(i//2+1), rotation='horizontal')
-        else:
-            ax2_i.plot(ode.t, Y[:,:,i//2].mean(axis=1))
-            ax2_i.plot(ode.t, Y[:,:,i//2], color='grey',alpha=.4)
-            ax2_i.set_ylabel('$Y_{\cdot,%d}$' % (i//2+1), rotation='horizontal')
-        if i//2==1:
-            ax2_i.set_xlabel('t')
-    plt.savefig(os.path.join(os.getcwd(),'properties/single_traj.png'),bbox_inches='tight')
-    
-    #### -- multiple short trajectories -- ####
-    num_traj = 3
-    K, L = 2, 10
-    ode = lrz96(num_traj=num_traj,K=K,L=L,max_time=3,time_res=1000)
-    x_t = ode.solve()
-    fig = plt.figure(figsize=(12,6))
-    ax1 = fig.add_subplot(1,2,1, projection='3d')
-    ode.plot_soln(ax=ax1,angle=10)
-    for i in range(3):
-        if i==0:
-            ax2_i = fig.add_subplot(3,2,(i+1)*2)
-        else:
-            ax2_i = fig.add_subplot(3,2,(i+1)*2, sharex=ax2_i)
-        ax2_i.plot(ode.t, x_t[:,:,i*ode.K].T)
-        # ax2_i.set_title('Trajectories of '+('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i]+'$(t)$')
-        ax2_i.set_ylabel(('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i], rotation='horizontal')
-        if i==2:
-            ax2_i.set_xlabel('t')
-    plt.savefig(os.path.join(os.getcwd(),'properties/multi_traj.png'),bbox_inches='tight')
-    
-    #### -- multiple short trajectories -- ####
-    # define the Lorenz96 ODE
-    num_traj = 500
-    ode_multrj = lrz96(num_traj=num_traj,K=K,L=L,max_time=5,time_res=1000)
-    # generate n trajectories
-    xt_multrj = ode_multrj.solve()
-    # ode_multrj.plot_soln()
-    # plt.show()
-    # average trajectory
-    xt_multrj_avg = xt_multrj.mean(axis=1)
-    print("The mean of time-averages for {:d} short trajectories is: ".format(num_traj))
-    print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
-    # plot
-    # fig,axes = plt.subplots(nrows=1,ncols=3,sharex=False,sharey=True,figsize=(16,4))
-    # for i, ax in enumerate(axes.flat):
-    #     plt.axes(ax)
-    #     plt.hist(xt_multrj_avg[:,i*self.L])
-    #     plt.title('Average '+('$X_1$','$Y_{1,1}$','$Y_{2,1}$')[i]+'$(t)$')
-    # plt.show()
-    xts_avg = pd.DataFrame(xt_multrj_avg[:,np.arange(3)*ode.K],columns=['x1_avg','y11_avg','y21_avg'])
-    g = sns.PairGrid(xts_avg, diag_sharey=False, size=3)
-    g.map_upper(sns.scatterplot, size=5)
-    g.map_lower(sns.kdeplot)
-    g.map_diag(sns.kdeplot)
-    g.savefig(os.path.join(os.getcwd(),'properties/multi_traj_avg.png'),bbox_inches='tight')
-    
-    #### -- one long trajectories -- ####
-    # define the Lorenz96 ODE
-    num_traj = 1
-    ode_multrj = lrz96(num_traj=num_traj,K=K,L=L,max_time=1000,time_res=10000)
-    # generate n trajectories
-    xt_multrj = ode_multrj.solve()
-    # ode_multrj.plot_soln()
-    # plt.show()
-    # average trajectory
-    xt_multrj_avg = xt_multrj.mean(axis=1)
-    print("The mean of time-averages for {:d} long trajectories is: ".format(num_traj))
-    print(["{:.4f}," .format(i) for i in xt_multrj_avg.mean(0)])
-    # plot
-    # pcnt=.1
-    # fig,axes = plt.subplots(nrows=3,ncols=2,sharex=False,sharey=False,figsize=(16,10))
-    # for k, ax in enumerate(axes.flat):
-    #     plt.axes(ax)
-    #     i=k//2; j=k%2
-    #     if j==0:
-    #         plt.plot(ode_multrj.t[:np.floor(len(ode_multrj.t)*pcnt).astype(int)], xt_multrj[:,:np.floor(len(ode_multrj.t)*pcnt).astype(int),i].T)
-    #         plt.title('First '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
-    #     elif j==1:
-    #         plt.plot(ode_multrj.t[-np.floor(len(ode_multrj.t)*pcnt).astype(int):], xt_multrj[:,-np.floor(len(ode_multrj.t)*pcnt).astype(int):,i].T)
-    #         plt.title('Last '+str(pcnt*100)+'% Trajectories of $'+{0:'x',1:'y',2:'z'}[i]+'(t)$')
-    # plt.show()
-    xt = pd.DataFrame(xt_multrj.squeeze()[::10,np.arange(3)*ode.K],columns=['$X_1$','$Y_{1,1}$','$Y_{2,1}$'])
-    g = sns.PairGrid(xt, diag_sharey=False, size=3)
-    g.map_upper(sns.scatterplot, size=5)
-    g.map_lower(sns.kdeplot)
-    g.map_diag(sns.kdeplot)
-    for ax in g.axes.flatten():
-        # rotate x axis labels
-        # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
-        # rotate y axis labels
-        ax.set_ylabel(ax.get_ylabel(), rotation = 0)
-        # set y labels alignment
-        ax.yaxis.get_label().set_horizontalalignment('right')
-    g.savefig(os.path.join(os.getcwd(),'properties/long_traj.png'),bbox_inches='tight')
+    #### -- test solvers -- ####
+    import time
+    # ode = lrz96(max_time=10,time_res=100)
+    ode = lrz96(t=np.linspace(100,110,100))
+    solver = 'solve_ivp'
+    start = time.time()
+    sol1 = ode.solve(solver=solver)
+    end = time.time()
+    print('Time used by '+ solver+' is %.4f' % (end-start))
+    solver = 'odeint'
+    start = time.time()
+    sol2 = ode.solve(solver=solver)
+    end = time.time()
+    print('Time used by '+ solver+' is %.4f' % (end-start))

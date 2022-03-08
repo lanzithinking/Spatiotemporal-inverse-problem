@@ -67,10 +67,18 @@ if __name__=='__main__':
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     K, L = 36, 10
-    avg_traj = 'aug' # True; False
+    # try:
+    #     f=open(os.path.join(os.getcwd(),'steady_state.pckl'),'rb')
+    #     ode_init=pickle.load(f)
+    #     print('Initialize Lorenz96 with steady state.')
+    #     f.close()
+    # except Exception:
+    #     ode_init = -1 + 2*np.random.RandomState(2021).random((num_traj, K*(1+L)))
+    #     ode_init[:,:K] *= 10
+    avg_traj = False # True; False
     var_out = True #'cov' ; False   
-    STlik = False
-    lrz96 = Lorenz96(ode_params=ode_params, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
+    STlik = 'sep'
+    lrz96 = Lorenz96(num_traj=num_traj, ode_params=ode_params, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     
     # prepare for plotting data
     para0 = lrz96.misfit.true_params

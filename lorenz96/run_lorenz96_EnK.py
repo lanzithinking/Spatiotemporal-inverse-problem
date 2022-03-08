@@ -43,30 +43,36 @@ def main(seed=2021):
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     K, L = 36, 10
+    # try:
+    #     f=open(os.path.join(os.getcwd(),'steady_state.pckl'),'rb')
+    #     ode_init=pickle.load(f)
+    #     print('Initialize Lorenz96 with steady state.')
+    #     f.close()
+    # except Exception:
+    #     ode_init = -1 + 2*np.random.RandomState(2021).random((num_traj, K*(1+L)))
+    #     ode_init[:,:K] *= 10
     avg_traj = {'simple':'aug','STlik':False}[args.mdls[args.mdlNO]] # True; 'aug'; False
     var_out = True # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
     lrz96 = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
     
     # initialization
+    warm_start = False
     u0=lrz96.prior.sample(n=args.ensemble_size)
-    # G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=np.exp(u_j), t=lrz96.obs_times)).squeeze() for u_j in u])
     if args.ensemble_size>200:
         n_jobs = np.min([10, multiprocessing.cpu_count()])
-        # G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=np.exp(u_j), t=lrz96.obs_times)).squeeze())(u_j) for u_j in u))
-    # y=lrz96.misfit.obs[0]
     if STlik:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).flatten() for u_j in u])
+            G=lambda u:np.stack([lrz96.fwd(parameter=u_j, warm_start=warm_start).flatten() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).flatten())(u_j) for u_j in u))
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.fwd(parameter=u_j, warm_start=warm_start).flatten())(u_j) for u_j in u))
         y=lrz96.misfit.obs[0].flatten()
         nz_cov=lrz96.misfit.stgp.tomat()
     else:
         if args.ensemble_size<=200:
-            G=lambda u:np.stack([lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).squeeze() for u_j in u])
+            G=lambda u:np.stack([lrz96.fwd(parameter=u_j, warm_start=warm_start).squeeze() for u_j in u])
         else:
-            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.misfit.observe(sol=lrz96.ode.solve(params=u_j, t=lrz96.obs_times)).squeeze())(u_j) for u_j in u))
+            G=lambda u:np.stack(Parallel(n_jobs=n_jobs)(delayed(lambda u_j:lrz96.fwd(parameter=u_j, warm_start=warm_start).squeeze())(u_j) for u_j in u))
         y=lrz96.misfit.obs[0] #(1,5K)
         nz_cov=np.diag(lrz96.misfit.nzvar[0]) if np.ndim(lrz96.misfit.nzvar)==2 else lrz96.misfit.nzvar[0]
     data={'obs':y,'size':y.size,'cov':nz_cov}

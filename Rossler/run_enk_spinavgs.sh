@@ -7,7 +7,7 @@
 #SBATCH -p parallel                   # partition 
 #SBATCH -q normal                   # QOS
 
-#SBATCH -t 2-12:00                  # wall time (D-HH:MM)
+#SBATCH -t 1-12:00                  # wall time (D-HH:MM)
 ##SBATCH -A slan7                   # Account hours will be pulled from (commented out with double # in front)
 #SBATCH -o %x.log                   # STDOUT (%j = JobId)
 #SBATCH -e %x.err                   # STDERR (%j = JobId)
@@ -23,7 +23,6 @@ cd ~/Projects/ST-inverse/code/Rossler
 
 # run python script
  if [ $# -eq 0 ]; then
-	mc_name='geoinfMC'
 	alg_NO=0
 	mdl_NO=0
 	ensbl_size=100

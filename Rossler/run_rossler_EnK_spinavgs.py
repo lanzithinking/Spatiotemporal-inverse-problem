@@ -90,7 +90,7 @@ def main(seed=2021, t0=100, t_res=100):
     return_list=return_list[:2]+return_list[3:]
     return_list+=(obs_times,avg_traj,STlik,var_out,y,args)
     # save
-    savepath=savepath=os.path.join(os.getcwd(),args.mdls[args.mdlNO]+'_T')
+    savepath=savepath=os.path.join(os.getcwd(),args.mdls[args.mdlNO]+'_Tinit')
     if not os.path.exists(savepath):
         print('Save path does not exist; created one.')
         os.makedirs(savepath)
@@ -111,8 +111,8 @@ if __name__ == '__main__':
             try:
                 sep = "\n"+"*-"*40+"*\n"
                 print(sep, "Running for time setting %d with seed %d ..."% (j, seed_i), sep)
-                # main(seed=seed_i, t0=10*(j+1)) # vary spin-up t0 save and results in a folder ending with '_Tinit' (modify savepath)
-                main(seed=seed_i, t_res=10*(j+1)) # vary window size T and save results in a folder ending with '_T' (modify savepath)
+                main(seed=seed_i, t0=10*(j+1)) # vary spin-up t0 save and results in a folder ending with '_Tinit' (modify savepath)
+                # main(seed=seed_i, t_res=10*(j+1)) # vary window size T and save results in a folder ending with '_T' (modify savepath)
                 n_success+=1
             except Exception as e:
                 print(e)

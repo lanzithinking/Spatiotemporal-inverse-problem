@@ -4,7 +4,7 @@
 #SBATCH -c 5                        # number of "tasks" (cores)
 #SBATCH --mem=64G                   # GigaBytes of memory required (per node)
 
-#SBATCH -p parallel                   # partition 
+#SBATCH -p parallel                 # partition 
 #SBATCH -q normal                   # QOS
 
 #SBATCH -t 2-12:00                  # wall time (D-HH:MM)
@@ -23,7 +23,6 @@ cd ~/Projects/ST-inverse/code/Lorenz
 
 # run python script
  if [ $# -eq 0 ]; then
-	mc_name='geoinfMC'
 	alg_NO=0
 	mdl_NO=0
 	ensbl_size=100

@@ -8,7 +8,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -46,7 +46,7 @@ class Lorenz96:
             self.x0[:,:self.K] *= 10
         else:
             self.x0 = kwargs.pop('ode_init') # fixed initial condition
-        self.prior_params = {'mean':[0, 10, 2, 5], 'var':[1, 10, 0.1, 10]} if prior_params is None else prior_params
+        self.prior_params = {'mean':[0, 8, 2, 8], 'var':[1, 10, 0.1, 10]} if prior_params is None else prior_params
         if obs_times is None:
             t_init = kwargs.pop('t_init',100.)
             t_final = kwargs.pop('t_final',110.)
@@ -82,16 +82,29 @@ class Lorenz96:
 #         print(sep, 'Set the approximate posterior model.', sep)
 #         self.post_Ga = Gaussian_apx_posterior(self.prior, eigs='hold')
     
+    def fwd(self, parameter=None, warm_start=False):
+        """
+        Forward mapping: u -> G(u)
+        """
+        if parameter is None:
+            parameter=self.prior.mean
+        self.x[PARAMETER] = parameter
+        if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
+        self.x[STATE] = self.ode.solve(params=self.x[PARAMETER], t=self.misfit.obs_times)
+        fwd_out = self.misfit.observe(sol=self.x[STATE])
+        return fwd_out
+        
     def _get_misfit(self, parameter=None, MF_only=True, warm_start=False):
         """
         Compute the misfit for given parameter.
         """
         if parameter is None:
             parameter=self.prior.mean
-        self.x[PARAMETER] = parameter
-        if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
-        self.x[STATE], self.cont_soln = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
-        msft = self.misfit.cost(self.x[STATE])
+        # self.x[PARAMETER] = parameter
+        # if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
+        # self.x[STATE], self.cont_soln = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
+        # msft = self.misfit.cost(self.x[STATE])
+        msft = self.misfit.cost(obs=self.fwd(parameter=parameter, warm_start=warm_start))
         if not MF_only: msft += self.prior.cost(parameter)
         return msft
     
@@ -237,9 +250,17 @@ if __name__ == '__main__':
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     K, L = 36, 10
+    try:
+        f=open(os.path.join(os.getcwd(),'steady_state.pckl'),'rb')
+        ode_init=pickle.load(f)
+        print('Initialize Lorenz96 with steady state.')
+        f.close()
+    except Exception:
+        ode_init = -1 + 2*np.random.RandomState(2021).random((num_traj, K*(1+L)))
+        ode_init[:,:K] *= 10
     avg_traj = False
     var_out = True
-    lrz = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=True)
+    lrz = Lorenz96(num_traj=num_traj, obs_times=obs_times, K=K, L=L, ode_init=ode_init, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=True)
     # # test
     # lrz.test(1e-8)
     # obtain MAP
