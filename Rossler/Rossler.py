@@ -76,7 +76,7 @@ class Rossler:
 #         print(sep, 'Set the approximate posterior model.', sep)
 #         self.post_Ga = Gaussian_apx_posterior(self.prior, eigs='hold')
     
-    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False):
+    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False, **kwargs):
         """
         Compute the misfit for given parameter.
         """
@@ -85,7 +85,7 @@ class Rossler:
         self.x[PARAMETER] = np.exp(parameter)
         if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
         self.x[STATE], self.cont_soln = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
-        msft = self.misfit.cost(self.x[STATE])
+        msft = self.misfit.cost(self.x[STATE], **kwargs)
         if not MF_only: msft += self.prior.cost(parameter)
         return msft
     

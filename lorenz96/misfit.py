@@ -70,6 +70,7 @@ class misfit:
                 # define STGP kernel for the likelihood (misfit)
                 sigma2_ = self.nzvar.mean(axis=0)
                 if np.ndim(self.nzvar)==3: sigma2_ = np.diag(sigma2_)
+                # if np.ndim(self.nzvar)==2: sigma2_ = np.diag(sigma2_)
                 if self.STlik in (True,'sep'):
                     # -- model 0 -- separable STGP
                     # self.stgp=STGP(spat=self.obs.mean(axis=0).T, temp=self.obs_times, opt=kwargs.pop('ker_opt',0), jit=1e-2)
@@ -83,12 +84,14 @@ class misfit:
                     #     for j in range(i+1,5*self.ode.K):
                     #         l_x[k] = np.sqrt(l_[i]*l_[j])
                     #         k+=1
-                    l_=np.repeat([.1, 1e-2],self.ode.K)
-                    l_x = squareform(np.sqrt(self.ode.K*l_[:,None]*l_),checks=False)
-                    # l_=np.repeat([1, .1],self.ode.K)
-                    # l_x = squareform(self.ode.K*l_[:,None]*l_,checks=False)
+                    # l_=np.repeat([.1, 1e-2],self.ode.K)
+                    # l_x = squareform(np.sqrt(self.ode.K*l_[:,None]*l_),checks=False)
+                    l_=np.repeat([1, .1],self.ode.K)
+                    l_x = squareform(self.ode.K*l_[:,None]*l_,checks=False)
                     C_x=GP(self.obs.mean(axis=0).T, l=l_x, sigma2=sigma2, store_eig=True)
-                    C_t=GP(self.obs_times, store_eig=True, l=0.1, sigma2=np.sqrt(sigma2_.sum()), jit=1e-2)#, ker_opt='matern',nu=.5)
+                    C_t=GP(self.obs_times, store_eig=True, l=0.1, sigma2=np.sqrt(sigma2_.sum()), ker_opt='matern',nu=1.5)
+                    # C_x=GP(self.obs.mean(axis=0).T); C_x.tomat=lambda : sigma2_
+                    # C_t=GP(self.obs_times, store_eig=True, l=0.1, sigma2=1.0, ker_opt='matern',nu=0.5)
                     self.stgp=STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',0), spdapx=False)
                     # self.stgp=STGP_mg(STGP(spat=C_x, temp=C_t, opt=kwargs.pop('ker_opt',2), spdapx=False), K=1, nz_var=self.nzvar.mean(axis=0).sum(), store_eig=True)
                 elif self.STlik=='full':

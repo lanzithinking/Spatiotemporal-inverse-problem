@@ -76,7 +76,7 @@ class Lorenz:
 #         print(sep, 'Set the approximate posterior model.', sep)
 #         self.post_Ga = Gaussian_apx_posterior(self.prior, eigs='hold')
     
-    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False):
+    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False, **kwargs):
         """
         Compute the misfit for given parameter.
         """
@@ -85,7 +85,7 @@ class Lorenz:
         self.x[PARAMETER] = np.exp(parameter)
         if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
         self.x[STATE], self.cont_soln = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
-        msft = self.misfit.cost(self.x[STATE])
+        msft = self.misfit.cost(self.x[STATE], **kwargs)
         if not MF_only: msft += self.prior.cost(parameter)
         return msft
     
@@ -233,8 +233,8 @@ if __name__ == '__main__':
     np.random.seed(seed)
     # define Bayesian inverse problem
     num_traj = 1
-    t_init = 100
-    t_final = 110
+    t_init = 1000
+    t_final = 1100
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
     avg_traj = 'aug'

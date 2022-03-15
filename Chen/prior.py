@@ -26,8 +26,8 @@ class prior:
         """
         mean and standard deviation for logarithms of (a, b, c)
         """
-        self.mean = mean
-        self.std = std
+        self.mean = mean if type(mean) is np.ndarray else np.array(mean)
+        self.std = std if type(std) is np.ndarray else np.array(std)
         self.d = self.mean.shape[1] if np.ndim(self.mean)>1 else len(self.mean)
     
     def cost(self, x):

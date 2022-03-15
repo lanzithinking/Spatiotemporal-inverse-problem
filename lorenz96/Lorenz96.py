@@ -94,7 +94,7 @@ class Lorenz96:
         fwd_out = self.misfit.observe(sol=self.x[STATE])
         return fwd_out
         
-    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False):
+    def _get_misfit(self, parameter=None, MF_only=True, warm_start=False, **kwargs):
         """
         Compute the misfit for given parameter.
         """
@@ -104,7 +104,7 @@ class Lorenz96:
         # if warm_start: self.ode.x0 = self.x[STATE][:,-1,:]
         # self.x[STATE], self.cont_soln = self.ode.solveFwd(params=self.x[PARAMETER], t=self.misfit.obs_times)
         # msft = self.misfit.cost(self.x[STATE])
-        msft = self.misfit.cost(obs=self.fwd(parameter=parameter, warm_start=warm_start))
+        msft = self.misfit.cost(obs=self.fwd(parameter=parameter, warm_start=warm_start), **kwargs)
         if not MF_only: msft += self.prior.cost(parameter)
         return msft
     
