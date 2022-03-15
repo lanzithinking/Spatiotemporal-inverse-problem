@@ -25,7 +25,7 @@ np.set_printoptions(precision=3, suppress=True)
 def main(seed=2021):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
-    parser.add_argument('mdlNO', nargs='?', type=int, default=0)
+    parser.add_argument('mdlNO', nargs='?', type=int, default=1)
     parser.add_argument('ensemble_size', nargs='?', type=int, default=100)
     parser.add_argument('max_iter', nargs='?', type=int, default=50)
     parser.add_argument('step_sizes', nargs='?', type=float, default=[1.,.1])
