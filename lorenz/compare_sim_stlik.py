@@ -88,7 +88,8 @@ Xr = scaler.fit_transform(Xr)
 # define DNN-RNN
 depth=2
 #activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear','lstm':'tanh'}
-activations={'hidden':'relu','latent':'linear','output':'linear','lstm':'tanh'}
+#['relu', 'linear', 'linear', 'tanh']
+activations={'hidden':tf.keras.layers.LeakyReLU(alpha=.01),'latent':'linear','output':'sigmoid','lstm':'linear'}
 #activations={'conv':tf.math.sin,'latent':tf.math.sin,'output':'linear','lstm':'tanh'}
 latent_dim=Yr.shape[2]
 droprate=0.2
@@ -123,7 +124,7 @@ except:
             # train dnn
             f_name='dnn_'+algs[alg_no]+str(ensbl_sz)+'_seed'+str(seeds[s])+'_trainsz'+str(train_sizes[t])
             try:
-                dnn.model=load_model(os.path.join(folder+'/DNN/',f_name+'.h5'))
+                dnn.model=load_model(os.path.join(folder+'/DNN_new/',f_name+'.h5'))
                 print(f_name+' has been loaded!')
             except Exception as err:
                 print(err)
@@ -140,7 +141,7 @@ except:
                 train_times[0,s,t]=t_used
                 print('\nTime used for training DNN: {}'.format(t_used))
                 # save DNN
-                save_dir=folder+'/DNN/'
+                save_dir=folder+'/DNN_new/'
                 if not os.path.exists(save_dir): os.makedirs(save_dir)
                 try:
                     dnn.model.save(os.path.join(save_dir,f_name+'.h5'))
@@ -150,11 +151,11 @@ except:
             # train DNN-RNN
             f_name='dnnrnn_'+algs[alg_no]+str(ensbl_sz)+'_seed'+str(seeds[s])+'_trainsz'+str(train_sizes[t])
             try:
-                dnnrnn.model=load_model(os.path.join(folder+'/DNN_RNN/',f_name+'.h5'))
+                dnnrnn.model=load_model(os.path.join(folder+'/DNN_RNN_new/',f_name+'.h5'))
                 print(f_name+' has been loaded!')
             except:
                 try:
-                    dnnrnn.model.load_weights(os.path.join(folder+'/DNN_RNN/',f_name+'.h5'))
+                    dnnrnn.model.load_weights(os.path.join(folder+'/DNN_RNN_new/',f_name+'.h5'))
                     print(f_name+' has been loaded!')
                 except Exception as err:
                     print(err)
@@ -162,16 +163,27 @@ except:
                     epochs=200
                     patience=0
                     t_start=timeit.default_timer()
-                    try:
+                    n_success = 0
+                    while n_success < 1:
                         dnnrnn.train(Xr[sel4train],Yr[sel4train],x_test=Xr[sel4test],y_test=Yr[sel4test],epochs=epochs,batch_size=64,verbose=1,patience=patience)
-                    except Exception as err:
-                        print(err)
-                        pass
+                        ycheck = dnnrnn.model(Xr[0][None,:])
+                        if np.sum(np.isnan(ycheck))==0:
+                            n_success+=1  
+                        else:
+                            dnnrnn=DNN_RNN(Xr.shape[1], Yr.shape[1:], depth=depth, latent_dim=latent_dim, droprate=droprate,
+                                           activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
+
+#                        try:
+#                            dnnrnn.train(Xr[sel4train],Yr[sel4train],x_test=Xr[sel4test],y_test=Yr[sel4test],epochs=epochs,batch_size=64,verbose=1,patience=patience)
+#                        except Exception as err:
+#                            print(err)
+#                            pass
+                            
                     t_used=timeit.default_timer()-t_start
                     train_times[1,s,t]=t_used
                     print('\nTime used for training DNNRNN: {}'.format(t_used))
                     # save DNNRNN
-                    save_dir=folder+'/DNN_RNN/'
+                    save_dir=folder+'/DNN_RNN_new/'
                     if not os.path.exists(save_dir): os.makedirs(save_dir)
                     try:
                         dnnrnn.model.save(os.path.join(save_dir,f_name+'.h5'))

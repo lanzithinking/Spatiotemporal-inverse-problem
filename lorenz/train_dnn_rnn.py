@@ -75,8 +75,8 @@ def main():
     
     # define DNN-RNN
     depth=args.depth
-    #activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear','lstm':'tanh'}
-    activations={'hidden':'relu','latent':'linear','output':'linear','lstm':'tanh'}
+    #activations={'hidden':'relu','latent':'linear','output':'linear','lstm':'tanh'}
+    activations={'hidden':tf.keras.layers.LeakyReLU(alpha=.01),'latent':'linear','output':'sigmoid','lstm':'linear'}#
     #activations={'conv':tf.math.sin,'latent':tf.math.sin,'output':'linear','lstm':'tanh'}
     latent_dim=y_train.shape[2]
     droprate=args.droprate
