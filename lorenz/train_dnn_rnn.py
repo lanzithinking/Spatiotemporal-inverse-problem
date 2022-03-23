@@ -130,7 +130,10 @@ def main():
     #         dnnrnn.model.save('./result/dnnrnn_model.h5')
     #         dnnrnn.save('./result','dnnrnn_'+algs[alg_no])
     #    dnnrnn.model.save_weights(os.path.join(savepath,f_name+'.h5'))#'./result','dnnrnn_'+algs[alg_no]+'.h5'
-            
+    
+    #W = tf.convert_to_tensor(lrz.misfit.stgp.tomat(),dtype=tf.float32) # lrz.misfit.stgp.tomat()
+    #loglik = lambda y: -0.5*tf.math.reduce_sum(tf.reshape(y-lrz.misfit.obs,[-1,output_dim])*tf.transpose(tf.linalg.solve(W,tf.transpose(tf.reshape(y-lrz.misfit.obs,[-1,output_dim])))),axis=1)
+    #logLik = lambda x: loglik(dnnrnn.model(x))
     logLik = lambda x: -lrz.misfit.cost(obs=dnnrnn.model(x))#lambda x: -0.5*tf.math.reduce_sum((dnnrnn.model(x)-lrz.misfit.obs)**2/lrz.misfit.nzvar,axis=[1,2])
     
     # select some gradients to evaluate and compare
@@ -200,6 +203,68 @@ def main():
         sumry_pd.to_csv(file,index=False,header=sumry_header)
     else:
         sumry_pd.to_csv(file,index=False,mode='a',header=False)
+        
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+    # define marginal density plot
+    def plot_pdf(x, **kwargs):
+        nx = len(x)
+        # z = np.zeros(nx)
+        para0 = kwargs.pop('para0',None)
+        f = kwargs.pop('f',None)
+        # for i in range(nx):
+        #     para_ = para0.copy()
+        #     para_[x.name] = x[i]
+        #     z[i] = f(np.array(list(para_.values()))[None,:])
+        params=np.tile(list(para0.values()),(nx,1))
+        params[:,list(para0.keys()).index(x.name)]=x
+        z=f(params)
+        
+        plt.plot(x, z, **kwargs)
+    
+    # define contour function
+    def contour(x, y, **kwargs):
+        nx = len(x); ny = len(y)
+        # z = np.zeros((nx, ny))
+        para0 = kwargs.pop('para0',None)
+        f = kwargs.pop('f',None)
+        # for i in range(nx):
+        #     for j in range(ny):
+        #         para_ = para0.copy()
+        #         para_[x.name] = x[i]; para_[y.name] = y[j]
+        #         z[i,j] = f(np.array(list(para_.values()))[None,:])
+        params=np.tile(list(para0.values()),(nx*ny,1))
+        params[:,list(para0.keys()).index(x.name)]=np.tile(x,ny)
+        params[:,list(para0.keys()).index(y.name)]=np.repeat(y,nx)
+        z=np.reshape(f(params).numpy(),(nx,ny),order='F')
+        
+        plt.contourf(x, y, z, levels=np.quantile(z,[.67,.9,.99]), **kwargs)
+    
+    # prepare for plotting data
+    para0 = lrz.misfit.true_params
+    marg = [1,.2,1]; res = 100
+    grid_data = lrz.misfit.true_params.copy()
+    for i,k in enumerate(grid_data):
+        grid_data[k] = np.linspace(grid_data[k]-marg[i],grid_data[k]+marg[i], num=res)
+    grid_data = pd.DataFrame(grid_data)
+    # plot
+    sns.set(font_scale=1.1)
+    import time
+    t_start=time.time()
+    g = sns.PairGrid(grid_data, diag_sharey=False, corner=True, size=3)
+    g.map_diag(plot_pdf, para0=para0, f=lambda param:-logLik(param))
+    # g.map_lower(contour, para0=para0, f=lambda param:np.exp(logLik(param)), cmap='gray')
+    g.map_lower(contour, para0=para0, f=lambda param:logLik(param), cmap='gray')
+    # for ax in g.axes.flatten():
+    #     # rotate x axis labels
+    #     # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+    #     # rotate y axis labels
+    #     ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+    #     # set y labels alignment
+    #     ax.yaxis.get_label().set_horizontalalignment('right')
+    g.savefig(os.path.join(savepath,f_name+'.png'),bbox_inches='tight')
+    t_end=time.time()
+    print('time used: %.5f'% (t_end-t_start))
 
 if __name__ == '__main__':
     main()

@@ -71,13 +71,16 @@ def main():
     # define DNN
     depth=args.depth
     # node_sizes=[X.shape[1],4096,2048,1024,Y.shape[1]]
-    #activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear','lstm':'tanh'}
-    activations={'hidden':tf.keras.layers.LeakyReLU(alpha=.01),'output':'linear'}
+
+    #activations={'hidden':tf.keras.layers.LeakyReLU(alpha=.01),'output':'linear'}
+    activations={'hidden':'softplus','output':'linear'}
     droprate=args.droprate
     #kernel_initializers={'hidden':sin_init,'output':'glorot_uniform'}
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True)###1,amsgrad=True?????????????????####
+    kernel_initializers={'hidden':'he_uniform','output':'he_uniform'}
+
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)###1,amsgrad=True?????????????????####
     
-    dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate, activations=activations, optimizer=optimizer)
+    dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, droprate=droprate, activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
     #dnn.model.trainable_variables
     
     # custom_loss = lambda y_true, y_pred: [tf.square(loglik(y_true)-loglik(y_pred)), (y_true-y_pred)/lrz.misfit.noise_variance]
@@ -85,7 +88,7 @@ def main():
     if not os.path.exists(savepath): os.makedirs(savepath)
     import time
     ctime=time.strftime("%Y-%m-%d-%H-%M-%S")
-    f_name='dnn_rnn_'+algs[alg_no]+str(ensbl_sz)+'_'+ctime
+    f_name='dnn_'+algs[alg_no]+str(ensbl_sz)+'_'+ctime
     
     try:
     #     dnnrnn.model=load_model(os.path.join(savepath,f_name+'.h5'),custom_objects={'loss':None})
@@ -105,7 +108,11 @@ def main():
     #         dnnrnn.model.save('./result/dnnrnn_model.h5')
     #         dnnrnn.save('./result','dnnrnn_'+algs[alg_no])
         #dnn.model.save_weights(os.path.join(savepath,f_name+'.h5'))#'./result','dnnrnn_'+algs[alg_no]+'.h5'
-            
+    
+    #W = tf.convert_to_tensor(lrz.misfit.nzvar[0],dtype=tf.float32)
+    #loglik = lambda y: -0.5*tf.math.reduce_sum((y-lrz.misfit.obs)*tf.transpose(tf.linalg.solve(W,tf.transpose(y-lrz.misfit.obs))),axis=1)
+    #logLik = lambda x: loglik(dnn.model(x))
+    
     #(dnn.model(x)-lrz.misfit.obs)*np.linalg.solve(lrz.misfit.nzvar,(dnn.model(x)-lrz.misfit.obs))
     logLik = lambda x: -lrz.misfit.cost(obs=dnn.model(x))
     # select some gradients to evaluate and compare
@@ -199,6 +206,70 @@ def main():
         sumry_pd.to_csv(file,index=False,header=sumry_header)
     else:
         sumry_pd.to_csv(file,index=False,mode='a',header=False)
+        
+        
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    # define marginal density plot
+    def plot_pdf(x, **kwargs):
+        nx = len(x)
+        # z = np.zeros(nx)
+        para0 = kwargs.pop('para0',None)
+        f = kwargs.pop('f',None)
+        # for i in range(nx):
+        #     para_ = para0.copy()
+        #     para_[x.name] = x[i]
+        #     z[i] = f(np.array(list(para_.values()))[None,:])
+        params=np.tile(list(para0.values()),(nx,1))
+        params[:,list(para0.keys()).index(x.name)]=x
+        z=f(params)
+        
+        plt.plot(x, z, **kwargs)
+    
+    # define contour function
+    def contour(x, y, **kwargs):
+        nx = len(x); ny = len(y)
+        # z = np.zeros((nx, ny))
+        para0 = kwargs.pop('para0',None)
+        f = kwargs.pop('f',None)
+        # for i in range(nx):
+        #     for j in range(ny):
+        #         para_ = para0.copy()
+        #         para_[x.name] = x[i]; para_[y.name] = y[j]
+        #         z[i,j] = f(np.array(list(para_.values()))[None,:])
+        params=np.tile(list(para0.values()),(nx*ny,1))
+        params[:,list(para0.keys()).index(x.name)]=np.tile(x,ny)
+        params[:,list(para0.keys()).index(y.name)]=np.repeat(y,nx)
+        z=np.reshape(f(params).numpy(),(nx,ny),order='F')
+        
+        plt.contourf(x, y, z, levels=np.quantile(z,[.67,.9,.99]), **kwargs)
+    
+    # prepare for plotting data
+    para0 = lrz.misfit.true_params
+    marg = [1,.2,1]; res = 100
+    grid_data = lrz.misfit.true_params.copy()
+    for i,k in enumerate(grid_data):
+        grid_data[k] = np.linspace(grid_data[k]-marg[i],grid_data[k]+marg[i], num=res)
+    grid_data = pd.DataFrame(grid_data)
+    # plot
+    sns.set(font_scale=1.1)
+    import time
+    t_start=time.time()
+    g = sns.PairGrid(grid_data, diag_sharey=False, corner=True, size=3)
+    g.map_diag(plot_pdf, para0=para0, f=lambda param:-logLik(param))
+    # g.map_lower(contour, para0=para0, f=lambda param:np.exp(logLik(param)), cmap='gray')
+    g.map_lower(contour, para0=para0, f=lambda param:logLik(param), cmap='gray')
+    # for ax in g.axes.flatten():
+    #     # rotate x axis labels
+    #     # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+    #     # rotate y axis labels
+    #     ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+    #     # set y labels alignment
+    #     ax.yaxis.get_label().set_horizontalalignment('right')
+    g.savefig(os.path.join(savepath,f_name+'.png'),bbox_inches='tight')
+    t_end=time.time()
+    print('time used: %.5f'% (t_end-t_start))
 
 if __name__ == '__main__':
     main()
