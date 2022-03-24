@@ -8,7 +8,7 @@ import os,argparse,pickle
 import numpy as np
 
 # the inverse problem
-from Lorenz import Lorenz
+from lorenz import Lorenz
 
 from joblib import Parallel, delayed
 import multiprocessing
