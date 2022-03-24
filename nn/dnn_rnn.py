@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 """
-Deep (input) - Recurrent (output) Neural Network (input)
+Dense Neural Network (input) - Recurrent (output) Neural Network (input)
+Shiwei Lan @ASU, 2022
 --------------------------
-DNN-RNN in TensorFlow 2.2
+DNN-RNN in TensorFlow 2.8
 -------------------------
-Created December 21, 2020
+Created March 13, 2022
 """
-__author__ = "Shuyi Li"
+__author__ = "Shiwei Lan"
 __copyright__ = "Copyright 2022"
-__credits__ = "Shiwei Lan"
 __license__ = "GPL"
 __version__ = "0.1"
 __maintainer__ = "Shiwei Lan"
@@ -16,7 +16,7 @@ __email__ = "slan@asu.edu; lanzithinking@gmail.com"
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Input,Conv2D,MaxPooling2D,Dropout,Flatten,Dense,Reshape,SimpleRNN,GRU,LSTM
+from tensorflow.keras.layers import Input,Dropout,Dense,Reshape,SimpleRNN,GRU,LSTM
 from tensorflow.keras.models import Model
 # from tensorflow.keras.models import load_model
 from tensorflow.keras.callbacks import EarlyStopping
@@ -25,10 +25,10 @@ from tensorflow.keras.callbacks import EarlyStopping
 class DNN_RNN:
     def __init__(self, input_dim, output_shape, depth=3, **kwargs):
         """
-        Deep Neural Network
+        Dense-Recurrent Neural Network
         --------------------------------------------------------------------------------
         input_dim: the dimension of the input space
-        output_shape: the dimension of the output space (temp_dim, spat_dim)
+        output_shape: output shape (temp_dim, spat_dim)
         depth: the depth of the network
         node_sizes: sizes of the nodes of the network, which can override depth
         droprate: the rate of Dropout
@@ -37,22 +37,20 @@ class DNN_RNN:
         """
         self.input_dim=input_dim
         self.output_shape=output_shape
-        self.latent_dim = kwargs.pop('latent_dim',self.output_shape[1])
+        self.output_dim=np.prod(self.output_shape)
         self.depth = depth
         self.node_sizes = kwargs.pop('node_sizes',None)
         if self.node_sizes is None:
-            self.node_sizes = np.linspace(self.input_dim,self.output_shape[0]*self.latent_dim,self.depth+1,dtype=np.int)
+            self.node_sizes = np.linspace(self.input_dim,self.output_dim,self.depth+1,dtype=np.int)
         else:
             self.depth=np.size(self.node_sizes)-1
-        if self.node_sizes[0]!=self.input_dim or self.node_sizes[-1]!=self.output_shape[0]*self.latent_dim:
+        if self.node_sizes[0]!=self.input_dim or self.node_sizes[-1]!=self.output_dim:
             raise ValueError('Node sizes not matching input/output dimensions!')
         self.droprate = kwargs.pop('droprate',0)
-        self.activations = kwargs.pop('activations',{'hidden':'relu','latent':'linear', 'output':'sigmoid','lstm':'tanh'})
-        self.kernel_initializers=kwargs.pop('kernel_initializers',{'hidden':'glorot_uniform','latent':'glorot_uniform','output':'glorot_uniform'})
+        self.activations = kwargs.pop('activations',{'hidden':'relu','output':'sigmoid','lstm':'tanh'})
+        self.kernel_initializers=kwargs.pop('kernel_initializers',{'hidden':'glorot_uniform','output':'glorot_uniform'})
         # build neural network
         self.build(**kwargs)
-        
-        
     
     def _set_layers(self, input):
         """
@@ -60,30 +58,24 @@ class DNN_RNN:
         """
         output=input
         for i in range(self.depth):
-            layer_name = 'latent' if i==self.depth-1 else 'hidden_layer{}'.format(i)
-            activation = self.activations['latent'] if i==self.depth-1 else self.activations['hidden']
-            ker_ini_hidden = self.kernel_initializers['hidden'](output.shape[1]*30**(i==0)) if callable(self.kernel_initializers['hidden']) else self.kernel_initializers['hidden']
-            ker_ini_latent = self.kernel_initializers['latent'](output.shape[1]) if callable(self.kernel_initializers['latent']) else self.kernel_initializers['latent']
-            ker_ini = ker_ini_latent if i==self.depth-1 else ker_ini_hidden
-            if callable(activation):
-                output=Dense(units=self.node_sizes[i+1], kernel_initializer=ker_ini, name=layer_name)(output)
-                output=activation(output)
+            ker_ini = self.kernel_initializers['hidden'](output.shape[1]*30**(i==0)) if callable(self.kernel_initializers['hidden']) else self.kernel_initializers['hidden']
+            if callable(self.activations['hidden']):
+                output=Dense(units=self.node_sizes[i+1], kernel_initializer=ker_ini, name='hidden_{}'.format(i))(output)
+                output=self.activations['hidden'](output)
             else:
-                output=Dense(units=self.node_sizes[i+1], activation=activation, kernel_initializer=ker_ini, name=layer_name)(output)
+                output=Dense(units=self.node_sizes[i+1], activation=self.activations['hidden'], kernel_initializer=ker_ini, name='hidden_{}'.format(i))(output)
             if self.droprate>0: output=Dropout(rate=self.droprate)(output)
-        
         ker_ini = self.kernel_initializers['output'](output.shape[1]) if callable(self.kernel_initializers['output']) else self.kernel_initializers['output']
         # transform original output(n_batch,temp_dim*spat_dim) to RNN input(n_batch,temp_dim,spat_dim)
-        output = Reshape((self.output_shape[0],self.latent_dim))(output)
+        output = Reshape(self.output_shape)(output)
         recurr = {'output':SimpleRNN,'gru':GRU,'lstm':LSTM}[list(self.activations.keys())[-1]]
-        if len(self.activations)==3:
+        if len(self.activations)==2:
             output = recurr(units=self.output_shape[1], return_sequences=True,  activation=self.activations['output'],
                             kernel_initializer=ker_ini, name='recur')(output)
         else:
             output = recurr(units=self.output_shape[1], return_sequences=True,  activation=list(self.activations.values())[-1], recurrent_activation=self.activations['output'],
                             kernel_initializer=ker_ini, name='recur')(output)
         return output
-
     
     def _custom_loss(self,loss_f):
         """
@@ -92,7 +84,7 @@ class DNN_RNN:
         def loss(y_true, y_pred):
 #             L=tf.keras.losses.MSE(y_true, y_pred)
             L=loss_f(y_true,y_pred)[0] # diff in potential
-            L+=tf.math.reduce_sum(tf.math.reduce_sum(self.batch_jacobian()*loss_f(y_true,y_pred)[1][:,:,None,None,None],axis=1)**2,axis=[1,2,3]) # diff in gradient potential
+            # L+=tf.math.reduce_sum(tf.math.reduce_sum(self.batch_jacobian()*loss_f(y_true,y_pred)[1][:,:,None],axis=1)**2,axis=[1]) # diff in gradient potential
             return L
         return loss
 
@@ -115,6 +107,7 @@ class DNN_RNN:
         """
         Train the model with data
         """
+        
         num_samp=x_train.shape[0]
         if any([i is None for i in (x_test, y_test)]):
             tr_idx=np.random.choice(num_samp,size=np.floor(.75*num_samp).astype('int'),replace=False)
@@ -127,12 +120,11 @@ class DNN_RNN:
                                       validation_data=(x_test, y_test),
                                       epochs=epochs,
                                       batch_size=batch_size,
-                                      shuffle=True,
+                                      shuffle=False,
                                       callbacks=[es],
                                       verbose=verbose, **kwargs)
-        
     
-    def save(self, savepath='./',filename='dnn_rnn_model'):
+    def save(self, savepath='./',filename='dnnrnn_model'):
         """
         Save the trained model for future use
         """
@@ -143,17 +135,16 @@ class DNN_RNN:
         """
         Output model prediction
         """
-        assert input.shape[1]==self.input_dim, 'Wrong image shape!'
+        assert input.shape[1]==self.input_dim, 'Wrong input dimension!'
         return self.model.predict(input)
     
-    def gradient(self, input, objf=None, y_train=None):
+    def gradient(self, input, objf=None):
         """
         Obtain gradient of objective function wrt input
         """
         if not objf:
             #where do we define self.y_train
-            objf = tf.keras.losses.MeanSquaredError()
-            objf = lambda x: objf(y_train,self.model(x))
+            objf = lambda x: tf.keras.losses.MeanSquaredError(self.y_train,self.model(x))
         x = tf.Variable(input, trainable=True, dtype=tf.float32)
         with tf.GradientTape(persistent=True) as tape:
             tape.watch(x)
@@ -193,41 +184,43 @@ class DNN_RNN:
 if __name__ == '__main__':
     import sys,os
     sys.path.append( "../" )
-    from lorenz.lorenz import Lorenz
+    sys.path.append("../Lorenz/")
+    from Lorenz import Lorenz
     # set random seed
     seed=2021
     np.random.seed(seed)
     tf.random.set_seed(seed)
     
-    ## define Lorenz inverse problem ##
+    # define the inverse problem
     num_traj = 1 # only consider single trajectory!
     prior_params = {'mean':[2.0, 1.2, 3.3], 'std':[0.2, 0.5, 0.15]}
     t_init = 100
     t_final = 110
     time_res = 100
     obs_times = np.linspace(t_init, t_final, time_res)
-    avg_traj = {'simple':'aug','STlik':False}['STlik'] # True; 'aug'; False
-    var_out = True # True; 'cov'; False
-    STlik = True
-    lrz = Lorenz(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
-        
-    temp_dim,spat_dim=lrz.misfit.obs[0].shape
+    avg_traj = False # True; 'aug'; False
+    var_out = 'cov' # True; 'cov'; False
+    STlik = 'sep'
+    lrz = Lorenz(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik)
+    temp_dim,spat_dim=lrz.misfit.obs.shape[1:]
     # algorithms
     algs=['EKI','EKS']
     num_algs=len(algs)
     alg_no=1
+    mdls=('simple','STlik')
+    num_mdls=len(mdls)
+    mdl_no=1 # DNN-RNN for spatiotemporal model
     
     # load data
     ensbl_sz = 500
-    folder = './train_NN'
-    loaded=np.load(file=os.path.join(folder,algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
+    folder = '../Lorenz/train_NN'
+    loaded=np.load(file=os.path.join(folder,mdls[mdl_no]+'_'+algs[alg_no]+'_ensbl'+str(ensbl_sz)+'_training_XY.npz'))
     X=loaded['X']
     Y=loaded['Y']
     Y=Y.reshape((-1,temp_dim,spat_dim))
     # pre-processing: scale X to 0-1
     #X-=np.nanmin(X,axis=np.arange(X.ndim)[1:])
     #X/=np.nanmax(X,axis=np.arange(X.ndim)[1:])
-    
     # split train/test
     num_samp=X.shape[0]
     n_tr=np.int(num_samp*.75)
@@ -235,17 +228,17 @@ if __name__ == '__main__':
     x_test,y_test=X[n_tr:],Y[n_tr:]
     
     # define DNN-RNN
-    depth=2
-    #activations={'conv':'relu','latent':tf.keras.layers.PReLU(),'output':'linear','lstm':'tanh'}
-    activations={'hidden':'relu','latent':'linear','output':'linear','lstm':'tanh'}
-#     activations={'conv':tf.math.sin,'latent':tf.math.sin,'output':'linear','lstm':'tanh'}
-    latent_dim=y_train.shape[2]
+    depth=4
+    node_sizes=[3,30,100,3]
+    activations={'hidden':'relu','output':'linear','lstm':'tanh'}
+    # activations={'hidden':'relu','output':tf.keras.layers.PReLU(),'lstm':'tanh'}
+#     activations={'hidden':tf.math.sin,'output':'linear','lstm':'tanh'}
     droprate=.25
     sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
-    #kernel_initializers={'conv':sin_init,'latent':sin_init,'output':'glorot_uniform'}
-    kernel_initializers={'hidden':'he_uniform','latent':sin_init,'output':'glorot_uniform'}
+    #kernel_initializers={'hidden':sin_init,'output':'glorot_uniform'}
+    kernel_initializers={'hidden':'he_uniform','output':'glorot_uniform'}
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
-    dnnrnn=DNN_RNN(x_train.shape[1], y_train.shape[1:], depth=depth, latent_dim=latent_dim, droprate=droprate,
+    dnnrnn=DNN_RNN(x_train.shape[1], y_train.shape[1:], depth=depth, node_sizes=node_sizes, droprate=droprate,
                    activations=activations, kernel_initializers=kernel_initializers, optimizer=optimizer)
     try:
 #         dnnrnn.model=load_model('./result/dnnrnn_'+algs[alg_no]+'.h5')
@@ -260,20 +253,15 @@ if __name__ == '__main__':
         dnnrnn.train(x_train,y_train,x_test=x_test,y_test=y_test,epochs=epochs,batch_size=64,verbose=1)
         t_used=timeit.default_timer()-t_start
         print('\nTime used for training DNN-RNN: {}'.format(t_used))
-        # save CNN-RNN
+        # save DNN-RNN
 #         dnnrnn.model.save('./result/dnnrnn_model.h5')
 #         dnnrnn.save('./result','dnnrnn_'+algs[alg_no])
         dnnrnn.model.save_weights('./result','dnnrnn_'+algs[alg_no]+'.h5')
     
     # some more test
-    loglik = lambda x: -0.5*tf.math.reduce_sum((dnnrnn.model(x)-lrz.misfit.obs[0])**2/lrz.misfit.nzvar[0],axis=[1,2])
+    loglik = lambda x: -0.5*lrz.misfit.cost(obs=dnnrnn.model(x))
     import timeit
     t_used = np.zeros((1,2))
-    import matplotlib.pyplot as plt
-    fig = plt.figure(figsize=(12,6), facecolor='white')
-    plt.ion()
-    plt.show(block=True)
-    
     for n in range(10):
         u=lrz.prior.sample()
         # calculate gradient
@@ -282,32 +270,14 @@ if __name__ == '__main__':
         t_used[0] += timeit.default_timer()-t_start
         # emulate gradient
         t_start=timeit.default_timer()
-        
+        ll_emul = logLik(u[None,:]).numpy()
         dll_emul = dnnrnn.gradient(u[None,:], loglik)
         t_used[1] += timeit.default_timer()-t_start
         # test difference
-        ll_emul = loglik(u)
         dif_fun = np.abs(ll_xact - ll_emul)
-        
         dif_grad = dll_xact - dll_emul
-        dif = np.array([dif_fun, np.linalg.norm(dif_grad)/np.linalg.norm(dll_xact)])
-        print('Difference between the calculated and emulated gradients: min ({}), med ({}), max ({})'.format(dif[1].min(),np.median(dif[1]),dif[1].max()))
-        print('Difference between the calculated and emulated loglik: ({})'.format(dif))
-#         # check the gradient extracted from emulation
-#         v=lrz.prior.sample()
-#         h=1e-4
-#         dll_emul_fd_v=(logLik(u[None,:]+h*v[None,:])-logLik(u[None,:]))/h
-#         reldif = abs(dll_emul_fd_v - dll_emul.flatten().dot(v))/np.linalg.norm(v)
-#         print('Relative difference between finite difference and extracted results: {}'.format(reldif))
+        dif[n] = np.array([dif_fun, np.linalg.norm(dif_grad)/np.linalg.norm(dll_xact)])
+        print('Difference between the calculated and emulated gradients: min ({}), med ({}), max ({})'.format(dif.min(),np.median(dif.get_local()),dif.max()))
         
-        # plot
-        plt.subplot(121)
-        plt.plot(dll_xact)
-        plt.title('Calculated Gradient')
-        plt.subplot(122)
-        plt.plot(dll_emul)
-        plt.title('Emulated Gradient')
-        plt.draw()
-        plt.pause(1.0/30.0)
-        
-    print('Time used to calculate vs emulate gradients: {} vs {}'.format(t_used[0], t_used[1]))
+    print('Time used to calculate vs emulate gradients: {} vs {}'.format(t_used))
+    

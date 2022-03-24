@@ -40,7 +40,7 @@ def main(seed=2021):
     lrz = Lorenz(num_traj=num_traj, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=False) # set STlik=False for simple likelihood; STlik has to be used with avg_traj
     
     # initialization
-    unknown=lrz.prior.sample(add_mean=False)
+    unknown=lrz.prior.sample()
     # MAP_file=os.path.join(os.getcwd(),'properties/MAP.pckl')
     # if os.path.isfile(MAP_file):
     #     f=open(MAP_file,'rb')
