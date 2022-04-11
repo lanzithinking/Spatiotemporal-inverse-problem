@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -22,7 +22,7 @@ class prior:
     """
     (Log-Normal) prior for parameters in Chen inverse problem.
     """
-    def __init__(self, mean=[4.0, 1.2, 3.3], std=[0.4, 0.5, 0.15]):
+    def __init__(self, mean=[3.5, 1.2, 3.3], std=[0.35, 0.5, 0.15]):
         """
         mean and standard deviation for logarithms of (a, b, c)
         """

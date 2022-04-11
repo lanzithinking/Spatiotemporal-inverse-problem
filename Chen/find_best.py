@@ -1,6 +1,6 @@
 """
-prepare training data
-Shiwei Lan @ ASU, August 2020
+find the best EnK output with the lowest error
+Shiwei Lan @ ASU, August 2022
 """
 
 import numpy as np
@@ -9,7 +9,6 @@ import os,sys
 sys.path.append( "../" )
 import pickle
 
-TRAIN='XY'
 SAVE=True
 
 # algorithms and settings
@@ -30,29 +29,25 @@ for m in range(num_mdls):
     for a in range(num_algs):
         print('Working on '+algs[a]+' algorithm...')
         found=False
+        best_f=''; min_err=np.inf
         # ensembles and forward outputs
         for f_i in pckl_files:
             if '_'+algs[a]+'_ensbl'+str(ensbl_sz)+'_' in f_i:
                 try:
                     f=open(os.path.join(fld_m,f_i),'rb')
                     loaded=pickle.load(f)
-                    ensbl=loaded[3][:-1,:,:] if 'Y' in TRAIN else loaded[3][1:,:,:]
-                    ensbl=ensbl.reshape((-1,ensbl.shape[2]))
-                    fwdout=loaded[2].reshape((-1,loaded[2].shape[2]))
+                    err=loaded[1]
+                    if err.min()<min_err:
+                        min_err = err.min()
+                        best_f = f_i
                     f.close()
                     print(f_i+' has been read!')
-                    found=True; break
+                    found=True
                 except:
                     found=False
                     pass
         if found and SAVE:
-            savepath='./train_NN/'
+            print('The best file is '+best_f+' with the smallest error: {}'.format(min_err))
+            savepath=fld_m+'/best_J'+str(ensbl_sz)
             if not os.path.exists(savepath): os.makedirs(savepath)
-            if 'Y' in TRAIN:
-                np.savez_compressed(file=os.path.join(savepath,lik_mdls[m]+'_'+algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=ensbl,Y=fwdout)
-            else:
-                np.savez_compressed(file=os.path.join(savepath,lik_mdls[m]+'_'+algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN),X=ensbl)
-    #         # how to load
-    #         loaded=np.load(file=os.path.join(savepath,lik_mdls[m]+'_'+algs[a]+'_ensbl'+str(ensbl_sz)+'_training_'+TRAIN+'.npz'))
-    #         X=loaded['X']
-    #         Y=loaded['Y']
+            os.system('cp '+os.path.join(fld_m,best_f)+' '+savepath)

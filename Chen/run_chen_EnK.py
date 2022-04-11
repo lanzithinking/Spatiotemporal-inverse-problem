@@ -38,7 +38,7 @@ def main(seed=2021):
 
     ## define Chen inverse problem ##
     num_traj = 1 # only consider single trajectory!
-    prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]}
+    prior_params = {'mean':[3.5, 1.2, 3.3], 'std':[0.35, 0.5, 0.15]}
     t_init = 100
     t_final = 110
     time_res = 100

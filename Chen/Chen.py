@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Mirjeta Pasha"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -38,9 +38,9 @@ class Chen:
         Initialize the Chen inverse problem consisting of the ODE model, the prior model and the misfit (likelihood) model.
         """
         self.num_traj = num_traj
-        self.ode_params = {'a':40.0, 'b':3.0, 'c':28.0} if ode_params is None else ode_params
+        self.ode_params = {'a':35.0, 'b':3.0, 'c':28.0} if ode_params is None else ode_params
         self.x0 = kwargs.pop('ode_init', -15 + 30 * np.random.RandomState(kwargs.pop('randinit_seed',2021)).random((self.num_traj, 3)))
-        self.prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]} if prior_params is None else prior_params
+        self.prior_params = {'mean':[3.5, 1.2, 3.3], 'std':[0.35, 0.5, 0.15]} if prior_params is None else prior_params
         if obs_times is None:
             t_init = kwargs.pop('t_init',0.)
             t_final = kwargs.pop('t_final',4.)

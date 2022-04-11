@@ -1,5 +1,5 @@
 """
-Main function to run ensemble Kalman (EnK) algorithms for Chen inverse problem with different spin-up times and average time lengths.
+Main function to run ensemble Kalman (EnK) algorithms for Chen inverse problem with different spin-up times and observation window sizes.
 Shiwei Lan @ ASU, 2021
 """
 
@@ -22,6 +22,10 @@ np.set_printoptions(precision=3, suppress=True)
 # seed=2021
 # np.random.seed(seed)
 
+# tests
+tests=['spin-up','obs-window']
+testNO=1 # change this to switch between varying spin-up lengths and observation window sizes
+
 def main(seed=2021, t0=100, t_res=100):
     parser = argparse.ArgumentParser()
     parser.add_argument('algNO', nargs='?', type=int, default=0)
@@ -38,7 +42,7 @@ def main(seed=2021, t0=100, t_res=100):
 
     ## define Chen inverse problem ##
     num_traj = 1 # only consider single trajectory!
-    prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]}
+    prior_params = {'mean':[3.5, 1.2, 3.3], 'std':[0.35, 0.5, 0.15]}
     t_init = t0
     time_res = t_res
     dt = 0.1
@@ -48,7 +52,7 @@ def main(seed=2021, t0=100, t_res=100):
     var_out = 'cov' # True; 'cov'; False
     STlik = (args.mdls[args.mdlNO]=='STlik')
     chn = Chen(num_traj=num_traj, prior_params=prior_params, obs_times=obs_times, avg_traj=avg_traj, var_out=var_out, seed=seed, STlik=STlik,
-               use_saved_obs=False, save_obs=False) # set use_saved_obs=True when varying observation window size t_res
+               use_saved_obs=(tests[testNO]=='obs-window'), save_obs=False) # set use_saved_obs=True when varying observation window size t_res
     
     # initialization
     u0=chn.prior.sample(n=args.ensemble_size)
@@ -90,7 +94,7 @@ def main(seed=2021, t0=100, t_res=100):
     return_list=return_list[:2]+return_list[3:]
     return_list+=(obs_times,avg_traj,STlik,var_out,y,args)
     # save
-    savepath=savepath=os.path.join(os.getcwd(),args.mdls[args.mdlNO]+'_Tinit')
+    savepath=savepath=os.path.join(os.getcwd(),args.mdls[args.mdlNO]+'_T'+{'spin-up':'init','obs-window':''}[tests[testNO]])
     if not os.path.exists(savepath):
         print('Save path does not exist; created one.')
         os.makedirs(savepath)
@@ -111,8 +115,10 @@ if __name__ == '__main__':
             try:
                 sep = "\n"+"*-"*40+"*\n"
                 print(sep, "Running for time setting %d with seed %d ..."% (j, seed_i), sep)
-                main(seed=seed_i, t0=10*(j+1)) # vary spin-up t0 save and results in a folder ending with '_Tinit' (modify savepath)
-                # main(seed=seed_i, t_res=10*(j+1)) # vary window size T and save results in a folder ending with '_T' (modify savepath)
+                if tests[testNO]=='spin-up':
+                    main(seed=seed_i, t0=10*(j+1)) # vary spin-up t0 save and results in a folder ending with '_Tinit' (modify savepath)
+                elif tests[testNO]=='obs-window':
+                    main(seed=seed_i, t_res=10*(j+1)) # vary window size T and save results in a folder ending with '_T' (modify savepath)
                 n_success+=1
             except Exception as e:
                 print(e)

@@ -9,7 +9,7 @@ Project of Bayesian SpatioTemporal analysis for Inverse Problems (B-STIP)
 __author__ = "Shuyi Li"
 __copyright__ = "Copyright 2021, The Bayesian STIP project"
 __license__ = "GPL"
-__version__ = "0.2"
+__version__ = "0.3"
 __maintainer__ = "Shiwei Lan"
 __email__ = "slan@asu.edu; lanzithinking@outlook.com"
 
@@ -26,7 +26,7 @@ class chen:
     dx_2/dt = (c-a) x_1 - x_1x_3 + c x_2
     dx_3/dt = x_1x_2 - b x_3
     """
-    def __init__(self, x0=None, t=None, a=40.0, b=3.0, c=28.0, **kwargs):
+    def __init__(self, x0=None, t=None, a=35.0, b=3.0, c=28.0, **kwargs):
         """
         x0: initial state
         t: time points to solve the dynmics at

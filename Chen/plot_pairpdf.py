@@ -58,7 +58,7 @@ if __name__=='__main__':
     
     # define Bayesian inverse problem
     num_traj = 1
-    ode_params = {'a':40.0, 'b':3.0, 'c':28.0}
+    ode_params = {'a':35.0, 'b':3.0, 'c':28.0}
     t_init = 100
     t_final = 110
     time_res = 100
@@ -76,7 +76,7 @@ if __name__=='__main__':
         grid_data[k] = np.linspace(grid_data[k]-marg[i],grid_data[k]+marg[i], num=res)
     grid_data = pd.DataFrame(grid_data)
     # plot
-    sns.set(font_scale=1.1)
+    sns.set(font_scale=1.2)
     import time
     t_start=time.time()
     g = sns.PairGrid(grid_data, diag_sharey=False, corner=True, size=3)

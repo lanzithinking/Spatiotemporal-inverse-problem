@@ -11,7 +11,7 @@ import dolfin as df
 
 # seed=2021
 # truth
-true_param = list({'a':40.0, 'b':3.0, 'c':28.0}.values())
+true_param = list({'a':35.0, 'b':3.0, 'c':28.0}.values())
 
 # algorithms and settings
 algs=('EKI','EKS')

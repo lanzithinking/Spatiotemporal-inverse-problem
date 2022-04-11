@@ -25,6 +25,7 @@ folder = './analysis'
 for m in range(num_mdls):
     print('Processing '+lik_mdls[m]+' likelihood model...\n')
     fld_m = folder+'/'+lik_mdls[m]
+    # fld_m += '/best_J'+str(ensbl_sz) # run find_best.py first
     # prepare data
     pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
     for a in range(num_algs):

@@ -25,7 +25,7 @@ num_mdls=len(mdls)
 mdl_no=0 # DNN for simple likelihood model
 ## define Chen inverse problem ##
 num_traj = 1 # only consider single trajectory!
-prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]}
+prior_params = {'mean':[3.5, 1.2, 3.3], 'std':[0.35, 0.5, 0.15]}
 t_init = 100
 t_final = 110
 time_res = 100
@@ -66,7 +66,7 @@ activations={'hidden':'softplus','output':'linear'}
 droprate=0.0
 # sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 kernel_initializers={'hidden':'he_uniform','output':'he_uniform'}
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001)
+optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001,amsgrad=True)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
 # dnn=DNN(x_train.shape[1], y_train.shape[1], depth=depth, node_sizes=node_sizes, droprate=droprate,
 #         activations=activations, optimizer=optimizer)

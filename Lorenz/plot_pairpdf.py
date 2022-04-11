@@ -73,9 +73,10 @@ if __name__=='__main__':
     grid_data = lrz.misfit.true_params.copy()
     for i,k in enumerate(grid_data):
         grid_data[k] = np.linspace(grid_data[k]-marg[i],grid_data[k]+marg[i], num=res)
-    grid_data = pd.DataFrame(grid_data,columns=['$\\sigma$','$\\beta$','$\\rho$'])
+    grid_data = pd.DataFrame(grid_data)#,columns=['$\\sigma$','$\\beta$','$\\rho$'])
+    
     # plot
-    sns.set(font_scale=1.1)
+    sns.set(font_scale=1.2)
     import time
     t_start=time.time()
     g = sns.PairGrid(grid_data, diag_sharey=False, corner=True, size=3)
@@ -84,9 +85,9 @@ if __name__=='__main__':
     for ax in g.axes.flatten():
         if ax:
             # rotate x axis labels
-            # ax.set_xlabel(ax.get_xlabel(), rotation = 90)
+            if ax.get_xlabel()!='': ax.set_xlabel('$\\'+ax.get_xlabel()+'$')
             # rotate y axis labels
-            ax.set_ylabel(ax.get_ylabel(), rotation = 0)
+            if ax.get_ylabel()!='': ax.set_ylabel('$\\'+ax.get_ylabel()+'$', rotation = 0)
             # set y labels alignment
             ax.yaxis.get_label().set_horizontalalignment('right')
     g.savefig(os.path.join(os.getcwd(),'properties/pairpdf'+('_simple' if not STlik else '_STlik_'+STlik)+'.png'),bbox_inches='tight')

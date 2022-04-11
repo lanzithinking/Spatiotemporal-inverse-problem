@@ -33,7 +33,7 @@ def main(seed=2021):
     parser.add_argument('emuNO', nargs='?', type=int, default=1)
     parser.add_argument('num_samp', nargs='?', type=int, default=10000)
     parser.add_argument('num_burnin', nargs='?', type=int, default=10000)
-    parser.add_argument('step_sizes', nargs='?', type=float, default=[3.5,3.5,3.,None,None]) # .00001 for simple likelihood model
+    parser.add_argument('step_sizes', nargs='?', type=float, default=[3.5,3.5,3.,None,None]) # .0001 for simple likelihood model
     parser.add_argument('step_nums', nargs='?', type=int, default=[1,1,5,1,5])
     parser.add_argument('algs', nargs='?', type=str, default=['e'+a for a in ('pCN','infMALA','infHMC','DRinfmMALA','DRinfmHMC')])
     parser.add_argument('emus', nargs='?', type=str, default=['dnn','dnnrnn'])
@@ -82,11 +82,12 @@ def main(seed=2021):
         output_dim=chn.misfit.obs.size
         depth=4
         node_sizes=[input_dim,30,100,output_dim]
-        activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.01),'output':'linear'}
+        activations={'hidden':'softplus','output':'linear'}
         droprate=0.0
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001,amsgrad=True)
         W = tf.convert_to_tensor(chn.misfit.nzvar[0],dtype=tf.float32)
-        custom_loss = lambda y_true, y_pred: [tf.math.reduce_sum((y_true-y_pred)*tf.transpose(tf.linalg.solve(W,tf.transpose(y_true-y_pred))),axis=1), None]
+        loglik = lambda y: -0.5*tf.math.reduce_sum((y-chn.misfit.obs)*tf.transpose(tf.linalg.solve(W,tf.transpose(y-chn.misfit.obs))),axis=1)
+        custom_loss = lambda y_true, y_pred: [tf.abs(loglik(y_true)-loglik(y_pred)), tf.linalg.solve(W,y_true-y_pred)]
         emulator=DNN(x_train.shape[1], y_train.shape[1], depth=depth, node_sizes=node_sizes, droprate=droprate,
                      activations=activations, optimizer=optimizer, loss=custom_loss)
     elif args.emus[args.emuNO]=='dnnrnn':
@@ -97,8 +98,9 @@ def main(seed=2021):
         node_sizes=[input_dim,30,100,output_dim]
         activations={'hidden':'softplus','output':'sigmoid','gru':'linear'}
         droprate=.5
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001,amsgrad=True,clipnorm=1)
         W = tf.convert_to_tensor(chn.misfit.stgp.tomat(),dtype=tf.float32)
+        loglik = lambda y: -0.5*tf.math.reduce_sum(tf.reshape(y-chn.misfit.obs,[-1,output_dim])*tf.transpose(tf.linalg.solve(W,tf.transpose(tf.reshape(y-chn.misfit.obs,[-1,output_dim])))),axis=1)
         custom_loss = lambda y_true, y_pred: [tf.abs(loglik(y_true)-loglik(y_pred)), tf.linalg.solve(W[None,:,:],tf.reshape(y_true-y_pred,[-1,output_dim,1]))]
         emulator=DNN_RNN(x_train.shape[1], y_train.shape[1:], depth=depth, node_sizes=node_sizes, droprate=droprate,
                          activations=activations, optimizer=optimizer, loss=custom_loss)

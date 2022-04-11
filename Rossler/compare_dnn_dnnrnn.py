@@ -19,7 +19,7 @@ mdls=('simple','STlik')
 n_mdl=len(mdls)
 emus=['DNN','DNN_RNN']
 # set random seed
-seeds = [2021+i*10 for i in range(1)]
+seeds = [2021+i*10 for i in range(10)]
 n_seed = len(seeds)
 # training/testing sizes
 train_sizes = [100,500,1000,5000,10000]
@@ -121,7 +121,7 @@ except:
                             print(err)
                             pass
                         t_used=timeit.default_timer()-t_start
-                        train_times[0,s,t]=t_used
+                        train_times[m,s,t]=t_used
                         print('\nTime used for training '+emus[m]+': {}'.format(t_used))
                         # save CNN
                         save_dir=folder+emus[m]
@@ -194,6 +194,7 @@ df_time=pd.DataFrame({'algorithm':alg_array.flatten(),
                      })
 
 # plot errors
+sns.set(font_scale=1.2)
 # fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
 fig,axes = plt.subplots(nrows=1,ncols=1,sharex=True,sharey=False,figsize=(7,5))
 # plot

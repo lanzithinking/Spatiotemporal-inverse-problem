@@ -99,6 +99,7 @@ def main(seed=2021):
         droprate=.5
         optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
         W = tf.convert_to_tensor(lrz.misfit.stgp.tomat(),dtype=tf.float32)
+        loglik = lambda y: -0.5*tf.math.reduce_sum(tf.reshape(y-lrz.misfit.obs,[-1,output_dim])*tf.transpose(tf.linalg.solve(W,tf.transpose(tf.reshape(y-lrz.misfit.obs,[-1,output_dim])))),axis=1)
         custom_loss = lambda y_true, y_pred: [tf.abs(loglik(y_true)-loglik(y_pred)), tf.linalg.solve(W[None,:,:],tf.reshape(y_true-y_pred,[-1,output_dim,1]))]
         emulator=DNN_RNN(x_train.shape[1], y_train.shape[1:], depth=depth, node_sizes=node_sizes, droprate=droprate,
                          activations=activations, optimizer=optimizer, loss=custom_loss)

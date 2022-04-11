@@ -28,7 +28,7 @@ pckl_files=[f for f in os.listdir(folder) if f.endswith('.pckl')]
 num_samp=10000; input_dim=3
 samps=np.zeros((n_mdl,num_samp,input_dim))
 
-sns.set(font_scale=1.1)
+sns.set(font_scale=1.2)
 for m in range(n_mdl):
     print('Working on '+mdls[m]+' model...\n')
     avg_traj = {'simple':'aug','STlik':False}[mdls[m]] # True; 'aug'; False

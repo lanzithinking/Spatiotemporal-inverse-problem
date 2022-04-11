@@ -54,6 +54,7 @@ else:
     for m in range(num_mdls):
         print('Processing '+lik_mdls[m]+' likelihood model...\n')
         fld_m = folder+'/'+lik_mdls[m]
+        fld_m += '/best_J'+str(ensbl_szs[2]) # run find_best.py first
         # calculate predictions
         pckl_files=[f for f in os.listdir(fld_m) if f.endswith('.pckl')]
         for i in range(num_algs):

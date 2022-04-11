@@ -19,7 +19,7 @@ mdls=('simple','STlik')
 n_mdl=len(mdls)
 emus=['DNN','DNN_RNN']
 # set random seed
-seeds = [2021+i*10 for i in range(1)]
+seeds = [2021+i*10 for i in range(10)]
 n_seed = len(seeds)
 # training/testing sizes
 train_sizes = [100,500,1000,5000,10000]
@@ -65,14 +65,15 @@ except:
         X=loaded['X']
         Y=loaded['Y']
         num_samp=X.shape[0]
+        loglik = lambda y: -lrz.misfit.cost(obs=y)
         # define emulators
         if emus[m]=='DNN':
             output_dim=lrz.misfit.obs.size
             depth=4
             node_sizes=[input_dim,30,100,output_dim]
-            activations={'hidden':'softplus','output':'linear'}
+            activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.01),'output':'linear'}
             droprate=0.0
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.002,amsgrad=True)
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
             emulator=DNN(X.shape[1], Y.shape[1], depth=depth, node_sizes=node_sizes, droprate=droprate,
                          activations=activations, optimizer=optimizer)
             W = tf.convert_to_tensor(lrz.misfit.nzvar[0],dtype=tf.float32)
@@ -83,15 +84,14 @@ except:
             output_dim = np.prod(lrz.misfit.obs.shape[1:])
             depth=4
             node_sizes=[input_dim,30,100,output_dim]
-            activations={'hidden':'softplus','output':'sigmoid','lstm':'relu'}
-            droprate=.25
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.002,amsgrad=True)
+            activations={'hidden':'softplus','output':'sigmoid','gru':'linear'}
+            droprate=.5
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
             W = tf.convert_to_tensor(lrz.misfit.stgp.tomat(),dtype=tf.float32)
-            custom_loss = lambda y_true, y_pred: [tf.math.reduce_sum(tf.reshape(y_true-y_pred,[-1,output_dim])*tf.transpose(tf.linalg.solve(W,tf.transpose(tf.reshape(y_true-y_pred,[-1,output_dim])))),axis=1), None]
-            emulator=DNN_RNN(X.shape[1], Y.shape[1:], depth=depth, node_sizes=node_sizes, droprate=droprate,
-                            activations=activations, optimizer=optimizer, loss=custom_loss)
             # loglik = lambda y: -0.5*tf.math.reduce_sum(tf.reshape(y-lrz.misfit.obs,[-1,output_dim])*tf.transpose(tf.linalg.solve(W,tf.transpose(tf.reshape(y-lrz.misfit.obs,[-1,output_dim])))),axis=1)
-        loglik = lambda y: -lrz.misfit.cost(obs=y)
+            custom_loss = lambda y_true, y_pred: [tf.abs(loglik(y_true)-loglik(y_pred)), tf.linalg.solve(W[None,:,:],tf.reshape(y_true-y_pred,[-1,output_dim,1]))]
+            emulator=DNN_RNN(X.shape[1], Y.shape[1:], depth=depth, node_sizes=node_sizes, droprate=droprate,
+                             activations=activations, optimizer=optimizer, loss=custom_loss)
         for s in range(n_seed):
             np.random.seed(seeds[s])
             tf.random.set_seed(seeds[s])
@@ -122,7 +122,7 @@ except:
                             print(err)
                             pass
                         t_used=timeit.default_timer()-t_start
-                        train_times[0,s,t]=t_used
+                        train_times[m,s,t]=t_used
                         print('\nTime used for training '+emus[m]+': {}'.format(t_used))
                         # save CNN
                         save_dir=folder+emus[m]
@@ -150,7 +150,7 @@ except:
                     
                     # emulation 
                     t_start=timeit.default_timer()
-                    ll_emul = logLik(u[None,:]).numpy()[0]
+                    ll_emul = logLik(u[None,:])#.numpy()[0]
                     # dll_emul = emulator.gradient(u[None,:], logLik)
                     t_used[1] += timeit.default_timer()-t_start
                     
@@ -195,10 +195,11 @@ df_time=pd.DataFrame({'algorithm':alg_array.flatten(),
                      })
 
 # plot errors
+sns.set(font_scale=1.2)
 # fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
 fig,axes = plt.subplots(nrows=1,ncols=1,sharex=True,sharey=False,figsize=(7,5))
 # plot
-plt.axes(axes.flat[0])
+# plt.axes(axes.flat[0])
 sns.barplot(x='training_size',y='function_error',hue='algorithm',data=df_err,errwidth=1,capsize=.1)
 # plt.title('Error of Function')
 plt.gca().legend().set_title('')

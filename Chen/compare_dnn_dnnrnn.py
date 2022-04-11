@@ -19,7 +19,7 @@ mdls=('simple','STlik')
 n_mdl=len(mdls)
 emus=['DNN','DNN_RNN']
 # set random seed
-seeds = [2021+i*10 for i in range(1)]
+seeds = [2021+i*10 for i in range(10)]
 n_seed = len(seeds)
 # training/testing sizes
 train_sizes = [100,500,1000,5000,10000]
@@ -71,9 +71,9 @@ except:
             output_dim=chn.misfit.obs.size
             depth=4
             node_sizes=[input_dim,30,100,output_dim]
-            activations={'hidden':tf.keras.layers.LeakyReLU(alpha=0.01),'output':'linear'}
+            activations={'hidden':'softplus','output':'linear'}
             droprate=0.0
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001,amsgrad=True)
             emulator=DNN(X.shape[1], Y.shape[1], depth=depth, node_sizes=node_sizes, droprate=droprate,
                          activations=activations, optimizer=optimizer)
             W = tf.convert_to_tensor(chn.misfit.nzvar[0],dtype=tf.float32)
@@ -86,7 +86,7 @@ except:
             node_sizes=[input_dim,30,100,output_dim]
             activations={'hidden':'softplus','output':'sigmoid','gru':'linear'}
             droprate=.5
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.005,amsgrad=True)
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001,amsgrad=True,clipnorm=1)
             W = tf.convert_to_tensor(chn.misfit.stgp.tomat(),dtype=tf.float32)
             # loglik = lambda y: -0.5*tf.math.reduce_sum(tf.reshape(y-chn.misfit.obs,[-1,output_dim])*tf.transpose(tf.linalg.solve(W,tf.transpose(tf.reshape(y-chn.misfit.obs,[-1,output_dim])))),axis=1)
             custom_loss = lambda y_true, y_pred: [tf.abs(loglik(y_true)-loglik(y_pred)), tf.linalg.solve(W[None,:,:],tf.reshape(y_true-y_pred,[-1,output_dim,1]))]
@@ -122,7 +122,7 @@ except:
                             print(err)
                             pass
                         t_used=timeit.default_timer()-t_start
-                        train_times[0,s,t]=t_used
+                        train_times[m,s,t]=t_used
                         print('\nTime used for training '+emus[m]+': {}'.format(t_used))
                         # save CNN
                         save_dir=folder+emus[m]
@@ -195,6 +195,7 @@ df_time=pd.DataFrame({'algorithm':alg_array.flatten(),
                      })
 
 # plot errors
+sns.set(font_scale=1.2)
 # fig,axes = plt.subplots(nrows=1,ncols=2,sharex=True,sharey=False,figsize=(12,5))
 fig,axes = plt.subplots(nrows=1,ncols=1,sharex=True,sharey=False,figsize=(7,5))
 # plot

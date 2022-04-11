@@ -26,7 +26,7 @@ num_mdls=len(mdls)
 mdl_no=1 # DNN-RNN for spatiotemporal model
 ## define Chen inverse problem ##
 num_traj = 1 # DNN-RNN for spatiotemporal model
-prior_params = {'mean':[4.0, 1.2, 3.3], 'std':[0.4, 0.5, 0.15]}
+prior_params = {'mean':[3.5, 1.2, 3.3], 'std':[0.35, 0.5, 0.15]}
 t_init = 100
 t_final = 110
 time_res = 100
@@ -70,7 +70,7 @@ activations={'hidden':'softplus','output':'sigmoid','gru':'linear'}
 droprate=0.5
 sin_init=lambda n:tf.random_uniform_initializer(minval=-tf.math.sqrt(6/n), maxval=tf.math.sqrt(6/n))
 kernel_initializers={'hidden':'he_uniform','output':'glorot_uniform'}
-optimizer=tf.keras.optimizers.Adam(learning_rate=0.001,amsgrad=True,clipnorm=1)
+optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001,amsgrad=True,clipnorm=1)
 # optimizer=tf.keras.optimizers.Adagrad(learning_rate=0.001)
 # dnnrnn=DNN_RNN(x_train.shape[1], y_train.shape[1:], depth=depth, node_sizes=node_sizes, droprate=droprate,
 #                activations=activations, optimizer=optimizer)
