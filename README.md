@@ -1,6 +1,7 @@
 # Spatiotemporal-inverse-problem
 
 ## Bayesian spatiotemporal modeling for inverse problems (B-STIP)
+[https://arxiv.org/abs/2204.10929](https://arxiv.org/abs/2204.10929)
 
 ### software preparation
 * [**FEniCS**](https://fenicsproject.org) Go to this [webpage](https://fenicsproject.org/download/) for installation.
@@ -25,6 +26,10 @@ Alternatively, install `hIPPYlib` directly in the `FEniCS` environment.
 	* `get_enk_rem_comparelik.py` to generate table comparing relative errors of posterior mean between different likelihood models.
 	* `plot_enk_rem_comparelik.py` to plot relative errors of mean by EnK between different likelihood models.
 	* `plot_enk_rem_spinavgs.py` to plot relative errors of mean for different spin-up lengths and window sizes between different likelihood models.
+	* `plot_predictions_comparelik.py` to plot forward predictions.
+	* `prep_traindata.py` to extract training data for NN emulator from EnK outputs.
+	* `run_XXX_einfGMC.py` to run MCMC algorithms based on NN emulators.
+	* `plot_postdist.py` to plot marginal and pairwise posterior densities based on emulative MCMC samples.
 * **optimizer** contains ensemble Kalman algorithms as optimization (EKI) or approximate sampling (EKS) methods.
 	* `EnK.py`: Ensemble Kalman algorithms
 * **sampler** contains different MCMC algorithms
@@ -32,5 +37,8 @@ Alternatively, install `hIPPYlib` directly in the `FEniCS` environment.
 	* `geoinfMC_dolfin.py`: infinite-dimensional Geometric Monte Carlo (working with `dolfin` in `FEniCS`).
 * **util** contains utility functions supplementary to dolfin package in `FEniCS`.
 	* `stgp`: spatiotemporal Gaussian process models.
+* **nn** contains neural network definitions:
+	* `dnn`: densely connected neural network.
+	* `dnn_rnn`: DNN-RNN (recurrent neural network) type of network.
 
-* Simple likelihood method refers to either static model (adv-diff) or time-averaged approached (chaotic dynamics)
+* Simple likelihood method refers to either static model (adv-diff) or time-averaged approach (chaotic dynamics).
