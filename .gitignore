@@ -132,8 +132,6 @@ dmypy.json
 **/data
 **/result
 **/doc
-./Lorenz96
-./dyn-linv
 
 # OS generated files #
 ######################
